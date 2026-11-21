@@ -7,5 +7,6 @@ license.workspace = true
 description = "The value types of HTTP semantics (RFC 9110) that HTTP/1.1, HTTP/2 and HTTP/3 share, checked at construction"
 
 [dependencies]
+iku_uri.workspace = true
 bytes.workspace = true
 snafu.workspace = true

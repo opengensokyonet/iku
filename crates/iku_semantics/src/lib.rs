@@ -9,6 +9,10 @@
 //! and pseudo-header fields in HTTP/2 and HTTP/3, the request line of
 //! HTTP/1.1) are checked by that version before it constructs these values.
 //!
+//! Besides RFC 9110, the package holds the semantics of extensions that more
+//! than one version defines; today that is the protocol of an extended
+//! CONNECT, which RFC 8441 defines for HTTP/2 and RFC 9220 for HTTP/3.
+//!
 //! - [`token`]: tokens ([`token::Token`], RFC 9110 §5.6.2), which methods and
 //!   field names are made of.
 //! - [`field`]: field names ([`field::FieldName`]), field values
@@ -16,9 +20,8 @@
 //!   with the members of list-based field values.
 //! - [`method`]: request methods ([`method::Method`]).
 //! - [`status`]: status codes ([`status::StatusCode`]).
-//! - [`uri`]: the parts of a target URI that HTTP uses: [`uri::Scheme`],
-//!   [`uri::Authority`] and [`uri::PathAndQuery`] ([RFC 3986]).
-//! - [`target`]: request targets ([`target::RequestTarget`]).
+//! - [`target`]: request targets ([`target::RequestTarget`]), made of the
+//!   parts of a target URI that the `iku_uri` package checks ([RFC 3986]).
 //! - [`protocol`]: the protocol of an extended CONNECT request
 //!   ([`protocol::Protocol`], [RFC 8441] §4, [RFC 9220]).
 //! - [`head`]: request heads ([`head::RequestHead`]) and response heads
@@ -55,4 +58,3 @@ pub mod status;
 pub mod target;
 pub mod te;
 pub mod token;
-pub mod uri;

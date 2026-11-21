@@ -19,6 +19,15 @@ name = "iku_semantics"
 version = "0.0.0"
 dependencies = [
  "bytes",
+ "iku_uri",
+ "snafu",
+]
+
+[[package]]
+name = "iku_uri"
+version = "0.0.0"
+dependencies = [
+ "bytes",
  "snafu",
 ]
 

@@ -1,8 +1,8 @@
 use super::*;
 use crate::field::{FieldName, FieldValue};
 use crate::target::TargetUri;
-use crate::uri::{Authority, PathAndQuery, Scheme};
 use bytes::Bytes;
+use iku_uri::{Authority, PathAndQuery, Scheme};
 
 fn uri() -> RequestTarget {
     RequestTarget::Uri(

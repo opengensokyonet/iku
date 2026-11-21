@@ -8,7 +8,10 @@ The repository is at an early stage. The APIs are experimental and are not stabl
 
 Each package has its own documentation in its `src/lib.rs`; `cargo doc --workspace --no-deps --open` builds it.
 
-- `crates/iku_semantics`: the value types of HTTP semantics (RFC 9110) for the head of a message, checked when they are constructed: tokens, field names, field values and field sections, methods, status codes, the parts of a target URI (RFC 3986), request targets, the protocol of an extended CONNECT (RFC 8441, RFC 9220), request and response heads, and the `Content-Length`, `Host`, `TE` and `Connection` fields. It does not use the standard library and needs `alloc`.
+- `crates/iku_semantics`: the value types of HTTP semantics (RFC 9110) for the head of a message, checked when they are constructed: tokens, field names, field values and field sections, methods, status codes, request targets, the protocol of an extended CONNECT (RFC 8441, RFC 9220), request and response heads, and the `Content-Length`, `Host`, `TE` and `Connection` fields.
+- `crates/iku_uri`: the parts of a target URI that HTTP uses (RFC 3986), checked when they are constructed: the scheme, the authority, and the path with the query.
+
+Neither package uses the standard library; both need `alloc`.
 
 ## Development
 
@@ -29,7 +32,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --no-deps
 cargo build --locked -p iku_semantics --target x86_64-unknown-none
 ```
 
-The last command checks that `iku_semantics` builds without the standard library.
+The last command checks that `iku_semantics`, and with it `iku_uri`, builds without the standard library.
 
 For development against a local checkout of SNAFU, an ignored `.cargo/config.toml` may patch its Git source to local paths under `[patch."https://github.com/opengensokyonet/snafu"]`. Keep that configuration and the resulting lockfile changes out of commits; the committed lockfile records the public sources.
 

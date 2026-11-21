@@ -1,6 +1,6 @@
 use super::*;
-use crate::uri::Host;
 use alloc::format;
+use iku_uri::Host;
 
 fn section(lines: &[&'static str]) -> FieldSection {
     lines

@@ -1,8 +1,8 @@
 //! The `Host` field (RFC 9110 §7.2).
 
 use crate::field::{FieldName, FieldSection, FieldValue};
-use crate::uri::{Authority, AuthorityError};
 use bytes::Bytes;
+use iku_uri::{Authority, AuthorityError};
 use snafu::{ResultExt, Snafu};
 
 /// The value of a `Host` field: the authority of the target URI, or empty

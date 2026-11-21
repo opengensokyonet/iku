@@ -1,6 +1,6 @@
 //! Request targets (RFC 9110 §7.1).
 
-use crate::uri::{Authority, PathAndQuery, Scheme};
+use iku_uri::{Authority, PathAndQuery, Scheme};
 use snafu::Snafu;
 
 /// The target of a request (RFC 9110 §7.1).

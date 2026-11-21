@@ -1,0 +1,11 @@
+[package]
+name = "iku_uri"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "The parts of a target URI that HTTP uses (RFC 3986), checked at construction"
+
+[dependencies]
+bytes.workspace = true
+snafu.workspace = true
