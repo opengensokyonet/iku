@@ -1,0 +1,11 @@
+[package]
+name = "iku_semantics"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "The value types of HTTP semantics (RFC 9110) that HTTP/1.1, HTTP/2 and HTTP/3 share, checked at construction"
+
+[dependencies]
+bytes.workspace = true
+snafu.workspace = true
