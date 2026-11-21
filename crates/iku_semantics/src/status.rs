@@ -134,3 +134,6 @@ pub enum ParseStatusCodeError {
         source: StatusCodeError,
     },
 }
+
+#[cfg(test)]
+mod tests;

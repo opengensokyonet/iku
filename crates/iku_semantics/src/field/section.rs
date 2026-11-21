@@ -146,3 +146,6 @@ impl Extend<(FieldName, FieldValue)> for FieldSection {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
 #[snafu(display("the lines of set-cookie cannot be combined"))]
 pub struct SetCookieNotCombinableError;
+
+#[cfg(test)]
+mod tests;

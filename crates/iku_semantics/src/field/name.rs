@@ -98,3 +98,6 @@ impl fmt::Debug for FieldName {
         write!(f, "FieldName({self})")
     }
 }
+
+#[cfg(test)]
+mod tests;

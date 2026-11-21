@@ -83,3 +83,6 @@ pub enum HostFieldError {
         source: AuthorityError,
     },
 }
+
+#[cfg(test)]
+mod tests;

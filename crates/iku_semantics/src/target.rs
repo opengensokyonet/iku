@@ -79,3 +79,6 @@ impl TargetUri {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
 #[snafu(display("an http or https target URI has no authority"))]
 pub struct MissingAuthorityError;
+
+#[cfg(test)]
+mod tests;

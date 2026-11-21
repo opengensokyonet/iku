@@ -21,3 +21,6 @@ pub fn has_member_other_than_trailers(fields: &FieldSection) -> bool {
         .list_members(&FieldName::TE)
         .any(|member| !member.eq_ignore_ascii_case(b"trailers"))
 }
+
+#[cfg(test)]
+mod tests;

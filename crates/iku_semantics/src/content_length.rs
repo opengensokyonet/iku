@@ -101,3 +101,6 @@ pub enum ContentLengthError {
     #[snafu(display("content-length holds different numbers"))]
     DifferentValues,
 }
+
+#[cfg(test)]
+mod tests;

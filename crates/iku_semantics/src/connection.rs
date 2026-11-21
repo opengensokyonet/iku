@@ -73,3 +73,6 @@ pub fn remove_connection_specific(fields: &mut FieldSection) {
                 .any(|option| option.eq_ignore_ascii_case(name.as_bytes()))
     });
 }
+
+#[cfg(test)]
+mod tests;

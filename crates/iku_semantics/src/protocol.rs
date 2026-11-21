@@ -96,3 +96,6 @@ pub enum ProtocolError {
         source: TokenError,
     },
 }
+
+#[cfg(test)]
+mod tests;

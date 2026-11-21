@@ -128,3 +128,6 @@ impl InvalidSchemeCharacterError {
         self.byte
     }
 }
+
+#[cfg(test)]
+mod tests;

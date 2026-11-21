@@ -132,3 +132,6 @@ impl InvalidTokenCharacterError {
         self.byte
     }
 }
+
+#[cfg(test)]
+mod tests;

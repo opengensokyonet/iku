@@ -83,3 +83,6 @@ impl fmt::Debug for Method {
         write!(f, "Method({})", self.0)
     }
 }
+
+#[cfg(test)]
+mod tests;

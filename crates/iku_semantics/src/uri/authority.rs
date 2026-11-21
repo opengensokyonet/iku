@@ -336,3 +336,6 @@ impl InvalidPortCharacterError {
         self.byte
     }
 }
+
+#[cfg(test)]
+mod tests;

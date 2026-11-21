@@ -140,3 +140,6 @@ impl fmt::Display for ControlCharacter {
         write!(f, "{:#04x}", self.0)
     }
 }
+
+#[cfg(test)]
+mod tests;

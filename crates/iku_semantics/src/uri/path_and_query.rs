@@ -154,3 +154,6 @@ impl InvalidPathCharacterError {
         self.byte
     }
 }
+
+#[cfg(test)]
+mod tests;

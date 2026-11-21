@@ -154,3 +154,6 @@ impl ResponseHead {
         (self.status, self.fields)
     }
 }
+
+#[cfg(test)]
+mod tests;

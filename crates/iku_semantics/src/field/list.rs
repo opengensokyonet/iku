@@ -76,3 +76,6 @@ fn trim(bytes: &[u8]) -> &[u8] {
         .map_or(start, |i| i + 1);
     &bytes[start..end]
 }
+
+#[cfg(test)]
+mod tests;
