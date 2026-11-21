@@ -3,7 +3,7 @@
 use crate::chars::is_tchar;
 use bytes::Bytes;
 use core::fmt;
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 
 /// A token: one or more `tchar` (RFC 9110 §5.6.2).
 ///
@@ -37,6 +37,12 @@ impl Token {
         Self(Bytes::from_static(text.as_bytes()))
     }
 
+    /// A token from bytes that were checked to be one.
+    pub(crate) fn from_checked(bytes: Bytes) -> Self {
+        debug_assert!(check(&bytes).is_ok());
+        Self(bytes)
+    }
+
     /// The bytes of the token.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
@@ -60,12 +66,15 @@ pub(crate) fn check(bytes: &[u8]) -> Result<(), TokenError> {
     if bytes.is_empty() {
         return EmptySnafu.fail();
     }
+    check_characters(bytes).context(InvalidCharacterSnafu)
+}
+
+/// Checks that every byte is a `tchar`, for bytes known not to be empty.
+pub(crate) fn check_characters(bytes: &[u8]) -> Result<(), InvalidTokenCharacterError> {
     match bytes.iter().position(|&byte| !is_tchar(byte)) {
-        Some(index) => Err(TokenError::InvalidCharacter {
-            source: InvalidTokenCharacterError {
-                index,
-                byte: bytes[index],
-            },
+        Some(index) => Err(InvalidTokenCharacterError {
+            index,
+            byte: bytes[index],
         }),
         None => Ok(()),
     }

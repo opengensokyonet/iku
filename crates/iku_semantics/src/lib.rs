@@ -23,6 +23,11 @@
 //!   ([`protocol::Protocol`], [RFC 8441] §4, [RFC 9220]).
 //! - [`head`]: request heads ([`head::RequestHead`]) and response heads
 //!   ([`head::ResponseHead`]).
+//! - The fields that each HTTP version checks or removes:
+//!   [`content_length`] ([`content_length::ContentLength`], RFC 9110 §8.6),
+//!   [`host`] ([`host::HostField`], §7.2), [`te`] (§10.1.4) and
+//!   [`connection`] (connection options and connection-specific fields,
+//!   §7.6.1).
 //!
 //! The package does not use the standard library; it needs `alloc`.
 //!
@@ -37,12 +42,17 @@
 extern crate alloc;
 
 mod chars;
+mod decimal;
 
+pub mod connection;
+pub mod content_length;
 pub mod field;
 pub mod head;
+pub mod host;
 pub mod method;
 pub mod protocol;
 pub mod status;
 pub mod target;
+pub mod te;
 pub mod token;
 pub mod uri;

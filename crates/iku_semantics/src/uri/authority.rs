@@ -1,6 +1,7 @@
 //! Authorities (RFC 3986 §3.2) as HTTP uses them.
 
 use crate::chars::{is_pct_encoded_at, is_sub_delim, is_unreserved};
+use crate::decimal::put_decimal;
 use bytes::{BufMut, Bytes, BytesMut};
 use core::fmt;
 use core::net::{Ipv4Addr, Ipv6Addr};
@@ -122,19 +123,7 @@ impl Authority {
                 let mut bytes = BytesMut::with_capacity(self.host.len() + 6);
                 bytes.put_slice(&self.host);
                 bytes.put_u8(b':');
-                let mut digits = [0u8; 5];
-                let mut start = digits.len();
-                let mut rest = port;
-                loop {
-                    start -= 1;
-                    // `rest % 10` is a single digit.
-                    digits[start] = b'0' + (rest % 10) as u8;
-                    rest /= 10;
-                    if rest == 0 {
-                        break;
-                    }
-                }
-                bytes.put_slice(&digits[start..]);
+                put_decimal(&mut bytes, u64::from(port));
                 bytes.freeze()
             }
         }
