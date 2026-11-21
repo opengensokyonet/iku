@@ -3,6 +3,7 @@
 use crate::token::{Token, TokenError};
 use bytes::Bytes;
 use core::fmt;
+use snafu::{ResultExt, Snafu};
 
 /// A request method: a token, case-sensitive (RFC 9110 §9.1).
 ///
@@ -35,9 +36,9 @@ impl Method {
     ///
     /// # Errors
     ///
-    /// [`TokenError`] if `bytes` is not a token.
-    pub fn new(bytes: Bytes) -> Result<Self, TokenError> {
-        Token::new(bytes).map(Self)
+    /// [`MethodError`] if `bytes` is not a token.
+    pub fn new(bytes: Bytes) -> Result<Self, MethodError> {
+        Token::new(bytes).map(Self).context(MethodSnafu)
     }
 
     /// As [`Method::new`], without copying `text`.
@@ -45,8 +46,8 @@ impl Method {
     /// # Errors
     ///
     /// As [`Method::new`].
-    pub fn from_static(text: &'static str) -> Result<Self, TokenError> {
-        Token::from_static(text).map(Self)
+    pub fn from_static(text: &'static str) -> Result<Self, MethodError> {
+        Token::from_static(text).map(Self).context(MethodSnafu)
     }
 
     /// The method as a token.
@@ -81,6 +82,20 @@ impl fmt::Display for Method {
 impl fmt::Debug for Method {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Method({})", self.0)
+    }
+}
+
+/// The bytes are not a method: a method is a token (RFC 9110 §9.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
+#[snafu(display("the method is not a token"))]
+pub struct MethodError {
+    source: TokenError,
+}
+
+impl MethodError {
+    /// Why the bytes are not a token.
+    pub const fn token_error(self) -> TokenError {
+        self.source
     }
 }
 

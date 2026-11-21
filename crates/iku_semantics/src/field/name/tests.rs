@@ -65,8 +65,14 @@ fn field_name_accepts_a_single_byte() {
 
 #[test]
 fn field_name_rejects_empty_input() {
-    assert_eq!(FieldName::new(Bytes::new()), Err(TokenError::Empty));
-    assert_eq!(FieldName::from_static(""), Err(TokenError::Empty));
+    assert_eq!(
+        FieldName::new(Bytes::new()).unwrap_err().token_error(),
+        TokenError::Empty
+    );
+    assert_eq!(
+        FieldName::from_static("").unwrap_err().token_error(),
+        TokenError::Empty
+    );
 }
 
 #[test]
@@ -78,7 +84,9 @@ fn field_name_rejects_a_colon_space_and_control_bytes() {
         (b"\x7f", 0, 0x7f),
         (b"a\xe9", 1, 0xe9),
     ] {
-        let error = FieldName::new(Bytes::copy_from_slice(text)).unwrap_err();
+        let error = FieldName::new(Bytes::copy_from_slice(text))
+            .unwrap_err()
+            .token_error();
         assert!(
             matches!(
                 error,
@@ -100,4 +108,10 @@ fn field_name_display_and_debug() {
     let name = FieldName::from_static("Accept").unwrap();
     assert_eq!(format!("{name}"), "accept");
     assert_eq!(format!("{name:?}"), "FieldName(accept)");
+}
+
+#[test]
+fn field_name_error_says_what_is_not_a_token() {
+    let error = FieldName::from_static("a b").unwrap_err();
+    assert_eq!(alloc::format!("{error}"), "the field name is not a token");
 }

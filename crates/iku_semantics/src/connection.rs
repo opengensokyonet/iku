@@ -13,6 +13,7 @@ use crate::field::list::members;
 use crate::field::{FieldName, FieldSection};
 use crate::token::{self, InvalidTokenCharacterError, Token};
 use alloc::vec::Vec;
+use snafu::{ResultExt, Snafu};
 
 /// The fields that are connection-specific whatever `Connection` lists:
 /// `Connection` itself and the ones RFC 9110 §7.6.1 names, `Proxy-Connection`,
@@ -40,10 +41,11 @@ pub fn is_connection_specific(name: &FieldName) -> bool {
 /// non-empty members, each a token (RFC 9110 §7.6.1).
 ///
 /// The tokens share the bytes of the field values. Options are
-/// case-insensitive; compare them with [`Token::eq_ignore_ascii_case`].
+/// case-insensitive; compare them with [`Token::eq_ignore_ascii_case`]. A
+/// member that is not a token is a [`ConnectionOptionError`].
 pub fn options(
     fields: &FieldSection,
-) -> impl Iterator<Item = Result<Token, InvalidTokenCharacterError>> + '_ {
+) -> impl Iterator<Item = Result<Token, ConnectionOptionError>> + '_ {
     let lines = fields
         .iter()
         .filter(|(name, _)| **name == FieldName::CONNECTION);
@@ -51,7 +53,9 @@ pub fn options(
         let bytes = value.clone().into_bytes();
         // A member is never empty, so only its characters need checking.
         members(value.as_bytes()).map(move |member| {
-            token::check_characters(member).map(|()| Token::from_checked(bytes.slice_ref(member)))
+            token::check_characters(member)
+                .map(|()| Token::from_checked(bytes.slice_ref(member)))
+                .context(ConnectionOptionSnafu)
         })
     })
 }
@@ -72,6 +76,24 @@ pub fn remove_connection_specific(fields: &mut FieldSection) {
                 .iter()
                 .any(|option| option.eq_ignore_ascii_case(name.as_bytes()))
     });
+}
+
+/// A member of a `Connection` line is not a connection option: an option is
+/// a token (RFC 9110 §7.6.1).
+///
+/// A member is never empty, so the only way to fail is a byte that is not a
+/// `tchar`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
+#[snafu(display("a connection option is not a token"))]
+pub struct ConnectionOptionError {
+    source: InvalidTokenCharacterError,
+}
+
+impl ConnectionOptionError {
+    /// The byte that is not a `tchar`, and where it is in the member.
+    pub const fn character_error(self) -> InvalidTokenCharacterError {
+        self.source
+    }
 }
 
 #[cfg(test)]

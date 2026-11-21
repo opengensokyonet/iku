@@ -12,6 +12,6 @@ mod name;
 mod section;
 mod value;
 
-pub use name::FieldName;
+pub use name::{FieldName, FieldNameError};
 pub use section::{FieldSection, SetCookieNotCombinableError};
 pub use value::{ControlCharacter, FieldValue, FieldValueError};

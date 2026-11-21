@@ -45,15 +45,16 @@ fn method_accepts_an_extension_token() {
 
 #[test]
 fn method_rejects_empty_and_non_token() {
-    assert_eq!(Method::new(Bytes::new()), Err(TokenError::Empty));
-    assert_eq!(Method::from_static(""), Err(TokenError::Empty));
+    let token_error = |result: Result<Method, MethodError>| result.unwrap_err().token_error();
+    assert_eq!(token_error(Method::new(Bytes::new())), TokenError::Empty);
+    assert_eq!(token_error(Method::from_static("")), TokenError::Empty);
     assert!(matches!(
-        Method::from_static("GE T"),
-        Err(TokenError::InvalidCharacter { source }) if source.index() == 2 && source.byte() == b' '
+        token_error(Method::from_static("GE T")),
+        TokenError::InvalidCharacter { source } if source.index() == 2 && source.byte() == b' '
     ));
     assert!(matches!(
-        Method::new(Bytes::from_static(b"GET\r")),
-        Err(TokenError::InvalidCharacter { .. })
+        token_error(Method::new(Bytes::from_static(b"GET\r"))),
+        TokenError::InvalidCharacter { .. }
     ));
 }
 
@@ -91,4 +92,11 @@ fn method_unknown_is_neither_safe_nor_idempotent() {
 fn method_display_and_debug() {
     assert_eq!(format!("{}", Method::GET), "GET");
     assert_eq!(format!("{:?}", Method::CONNECT), "Method(CONNECT)");
+}
+
+#[test]
+fn method_error_says_what_is_not_a_token() {
+    let error = Method::from_static("").unwrap_err();
+    assert_eq!(format!("{error}"), "the method is not a token");
+    assert_eq!(format!("{}", error.token_error()), "a token is empty");
 }

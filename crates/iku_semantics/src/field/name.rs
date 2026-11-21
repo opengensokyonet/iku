@@ -3,6 +3,7 @@
 use crate::token::{self, TokenError};
 use bytes::Bytes;
 use core::fmt;
+use snafu::{ResultExt, Snafu};
 
 /// A field name: a token, held in lowercase (RFC 9110 §5.1).
 ///
@@ -48,9 +49,9 @@ impl FieldName {
     ///
     /// # Errors
     ///
-    /// [`TokenError`] if `bytes` is not a token.
-    pub fn new(bytes: Bytes) -> Result<Self, TokenError> {
-        token::check(&bytes)?;
+    /// [`FieldNameError`] if `bytes` is not a token.
+    pub fn new(bytes: Bytes) -> Result<Self, FieldNameError> {
+        token::check(&bytes).context(FieldNameSnafu)?;
         if bytes.iter().any(u8::is_ascii_uppercase) {
             Ok(Self(Bytes::from(bytes.to_ascii_lowercase())))
         } else {
@@ -64,7 +65,7 @@ impl FieldName {
     /// # Errors
     ///
     /// As [`FieldName::new`].
-    pub fn from_static(text: &'static str) -> Result<Self, TokenError> {
+    pub fn from_static(text: &'static str) -> Result<Self, FieldNameError> {
         Self::new(Bytes::from_static(text.as_bytes()))
     }
 
@@ -96,6 +97,20 @@ impl fmt::Display for FieldName {
 impl fmt::Debug for FieldName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FieldName({self})")
+    }
+}
+
+/// The bytes are not a field name: a field name is a token (RFC 9110 §5.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
+#[snafu(display("the field name is not a token"))]
+pub struct FieldNameError {
+    source: TokenError,
+}
+
+impl FieldNameError {
+    /// Why the bytes are not a token.
+    pub const fn token_error(self) -> TokenError {
+        self.source
     }
 }
 

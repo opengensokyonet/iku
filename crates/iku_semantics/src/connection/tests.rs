@@ -58,7 +58,7 @@ fn is_connection_specific_is_false_for_other_names() {
     }
 }
 
-fn collect(fields: &FieldSection) -> Vec<Result<Token, InvalidTokenCharacterError>> {
+fn collect(fields: &FieldSection) -> Vec<Result<Token, ConnectionOptionError>> {
     options(fields).collect()
 }
 
@@ -118,7 +118,7 @@ fn options_reports_a_member_that_is_not_a_token() {
     let got = collect(&fields);
     assert_eq!(got.len(), 2);
     assert_eq!(got[0], Ok(token("ok")));
-    let error = got[1].clone().unwrap_err();
+    let error = got[1].clone().unwrap_err().character_error();
     assert_eq!((error.index(), error.byte()), (1, b'/'));
 }
 
@@ -127,7 +127,7 @@ fn options_reports_a_quoted_member() {
     let fields = section(&[("connection", "\"x\"")]);
     let got = collect(&fields);
     assert_eq!(got.len(), 1);
-    let error = got[0].clone().unwrap_err();
+    let error = got[0].clone().unwrap_err().character_error();
     assert_eq!((error.index(), error.byte()), (0, b'"'));
 }
 
@@ -135,7 +135,7 @@ fn options_reports_a_quoted_member() {
 fn options_reports_a_member_with_inner_whitespace() {
     let fields = section(&[("connection", "a b")]);
     let got = collect(&fields);
-    let error = got[0].clone().unwrap_err();
+    let error = got[0].clone().unwrap_err().character_error();
     assert_eq!((error.index(), error.byte()), (1, b' '));
 }
 
@@ -240,4 +240,18 @@ fn remove_connection_specific_leaves_a_section_without_connection_alone() {
     let mut empty = FieldSection::new();
     remove_connection_specific(&mut empty);
     assert!(empty.is_empty());
+}
+
+#[test]
+fn connection_option_error_says_what_is_not_a_token() {
+    let fields = section(&[("connection", "a/b")]);
+    let error = collect(&fields)[0].clone().unwrap_err();
+    assert_eq!(
+        alloc::format!("{error}"),
+        "a connection option is not a token"
+    );
+    assert_eq!(
+        alloc::format!("{}", error.character_error()),
+        "byte 0x2f at 1 is not a tchar"
+    );
 }
