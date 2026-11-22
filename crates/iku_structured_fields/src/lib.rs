@@ -9,8 +9,8 @@
 //! - Shapes: [`Item`], [`List`] (of [`ListMember`]s, each an [`Item`] or an
 //!   [`InnerList`]) and [`Dictionary`]; items and inner lists carry
 //!   [`Parameters`].
-//! - Bare items ([`BareItem`]): [`Integer`], [`Decimal`], [`SfString`],
-//!   [`SfToken`], byte sequences, booleans, [`Date`] and display strings;
+//! - Bare items ([`BareItem`]): [`Integer`], [`Decimal`], [`String`],
+//!   [`Token`], byte sequences, booleans, [`Date`] and display strings;
 //!   [`Key`]s name dictionary members and parameters.
 //! - Reading: `from_fields` parses the lines of a field in a
 //!   [`FieldSection`](iku_semantics::field::FieldSection) as if they were
@@ -56,6 +56,6 @@ pub use lines::FieldLinesError;
 pub use list::{List, ListMember};
 pub use number::{Decimal, DecimalOutOfRangeError, Integer, IntegerOutOfRangeError};
 pub use parameters::Parameters;
-pub use string::{InvalidSfStringCharacterError, SfString};
+pub use string::{InvalidStringCharacterError, String};
 pub use syntax::SyntaxError;
-pub use token::{InvalidSfTokenCharacterError, InvalidSfTokenStartError, SfToken, SfTokenError};
+pub use token::{InvalidTokenCharacterError, InvalidTokenStartError, Token, TokenError};

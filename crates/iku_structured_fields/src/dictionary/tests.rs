@@ -1,5 +1,5 @@
 use super::*;
-use crate::{InnerList, Integer, SfString, SfToken};
+use crate::{InnerList, Integer, Token};
 use alloc::string::{String, ToString};
 
 fn fv(text: &'static str) -> FieldValue {
@@ -56,7 +56,7 @@ fn rfc_9651_dictionaries() {
     assert_eq!(
         dictionary.get("en"),
         Some(&ListMember::Item(Item::new(BareItem::String(
-            SfString::from_static("Applepie").unwrap()
+            crate::String::from_static("Applepie").unwrap()
         ))))
     );
     assert_eq!(
@@ -209,7 +209,7 @@ fn serializes_inner_lists_and_tokens() {
         key("a"),
         ListMember::InnerList(InnerList::new(alloc::vec![
             Item::new(int(1)),
-            Item::new(BareItem::Token(SfToken::from_static("t").unwrap())),
+            Item::new(BareItem::Token(Token::from_static("t").unwrap())),
         ])),
     );
     dictionary.insert(

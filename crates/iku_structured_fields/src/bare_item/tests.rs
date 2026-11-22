@@ -45,16 +45,16 @@ fn parses_each_type() {
     assert_eq!(ok("4.5"), decimal(4500));
     assert_eq!(
         ok("\"hello world\""),
-        BareItem::String(SfString::from_static("hello world").unwrap())
+        BareItem::String(crate::String::from_static("hello world").unwrap())
     );
     assert_eq!(
         ok("foo123/456"),
-        BareItem::Token(SfToken::from_static("foo123/456").unwrap())
+        BareItem::Token(Token::from_static("foo123/456").unwrap())
     );
-    assert_eq!(ok("*"), BareItem::Token(SfToken::from_static("*").unwrap()));
+    assert_eq!(ok("*"), BareItem::Token(Token::from_static("*").unwrap()));
     assert_eq!(
         ok("Foo"),
-        BareItem::Token(SfToken::from_static("Foo").unwrap())
+        BareItem::Token(Token::from_static("Foo").unwrap())
     );
     assert_eq!(
         ok(":aGVsbG8=:"),
@@ -337,11 +337,13 @@ fn serializes_each_type() {
     assert_eq!(serialized(&decimal(-1)), "-0.001");
     assert_eq!(serialized(&decimal(2000)), "2.0");
     assert_eq!(
-        serialized(&BareItem::String(SfString::from_static("a\"b\\c").unwrap())),
+        serialized(&BareItem::String(
+            crate::String::from_static("a\"b\\c").unwrap()
+        )),
         "\"a\\\"b\\\\c\""
     );
     assert_eq!(
-        serialized(&BareItem::Token(SfToken::from_static("text/html").unwrap())),
+        serialized(&BareItem::Token(Token::from_static("text/html").unwrap())),
         "text/html"
     );
     assert_eq!(serialized(&BareItem::Boolean(true)), "?1");
@@ -419,8 +421,8 @@ fn round_trips_every_type() {
 fn converts_from_checked_types() {
     let integer_value = Integer::new(3).unwrap();
     let decimal_value = Decimal::from_thousandths(3500).unwrap();
-    let string = SfString::from_static("s").unwrap();
-    let token = SfToken::from_static("t").unwrap();
+    let string = crate::String::from_static("s").unwrap();
+    let token = Token::from_static("t").unwrap();
     let date_value = Date::from_seconds(integer_value);
     assert_eq!(
         BareItem::from(integer_value),
@@ -451,7 +453,7 @@ fn types_do_not_mix() {
     assert_ne!(integer(1), BareItem::Boolean(true));
     assert_ne!(integer(1), date(1));
     assert_ne!(
-        BareItem::String(SfString::from_static("a").unwrap()),
-        BareItem::Token(SfToken::from_static("a").unwrap())
+        BareItem::String(crate::String::from_static("a").unwrap()),
+        BareItem::Token(Token::from_static("a").unwrap())
     );
 }

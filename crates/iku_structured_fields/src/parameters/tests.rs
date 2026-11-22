@@ -1,5 +1,5 @@
 use super::*;
-use crate::{Date, Decimal, Integer, SfString, SfToken};
+use crate::{Date, Decimal, Integer, Token};
 use alloc::string::String;
 use bytes::Bytes;
 
@@ -56,11 +56,11 @@ fn parses_values_of_every_type() {
     );
     assert_eq!(
         parameters.get("c"),
-        Some(&BareItem::String(SfString::from_static("s").unwrap()))
+        Some(&BareItem::String(crate::String::from_static("s").unwrap()))
     );
     assert_eq!(
         parameters.get("d"),
-        Some(&BareItem::Token(SfToken::from_static("tok").unwrap()))
+        Some(&BareItem::Token(Token::from_static("tok").unwrap()))
     );
     assert_eq!(
         parameters.get("e"),
@@ -196,7 +196,7 @@ fn serializes_true_as_the_key_alone() {
     );
     parameters.insert(
         key("e"),
-        BareItem::String(SfString::from_static("x\"").unwrap()),
+        BareItem::String(crate::String::from_static("x\"").unwrap()),
     );
     assert_eq!(serialized(&parameters), ";a;b=?0;c=-1;d=2.0;e=\"x\\\"\"");
 }

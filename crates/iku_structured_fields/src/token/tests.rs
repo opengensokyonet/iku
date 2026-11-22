@@ -3,13 +3,13 @@ use alloc::format;
 use alloc::string::ToString;
 use core::error::Error;
 
-fn token(text: &'static str) -> SfToken {
-    SfToken::from_static(text).unwrap()
+fn token(text: &'static str) -> Token {
+    Token::from_static(text).unwrap()
 }
 
-fn parse(input: &'static [u8]) -> (SfToken, Bytes) {
+fn parse(input: &'static [u8]) -> (Token, Bytes) {
     let mut parser = Parser::new(Bytes::from_static(input));
-    let token = SfToken::parse(&mut parser);
+    let token = Token::parse(&mut parser);
     (token, Bytes::copy_from_slice(parser.rest()))
 }
 
@@ -43,7 +43,7 @@ fn token_may_hold_colon_and_slash() {
 
 #[test]
 fn empty_token_fails() {
-    assert_eq!(SfToken::new(Bytes::new()), Err(SfTokenError::Empty));
+    assert_eq!(Token::new(Bytes::new()), Err(TokenError::Empty));
 }
 
 #[test]
@@ -60,14 +60,14 @@ fn token_start_must_be_a_letter_or_star() {
         ("\"a", b'"'),
         ("~a", b'~'),
     ] {
-        match SfToken::from_static(text) {
-            Err(SfTokenError::InvalidStart { source }) => assert_eq!(source.byte(), byte, "{text}"),
+        match Token::from_static(text) {
+            Err(TokenError::InvalidStart { source }) => assert_eq!(source.byte(), byte, "{text}"),
             other => panic!("{text}: {other:?}"),
         }
     }
     assert!(matches!(
-        SfToken::new(Bytes::from_static(b"\xc3a")),
-        Err(SfTokenError::InvalidStart { source }) if source.byte() == 0xc3
+        Token::new(Bytes::from_static(b"\xc3a")),
+        Err(TokenError::InvalidStart { source }) if source.byte() == 0xc3
     ));
 }
 
@@ -92,25 +92,25 @@ fn token_character_must_be_tchar_colon_or_slash() {
         ("a}b", 1, b'}'),
         ("abc\t", 3, b'\t'),
     ] {
-        match SfToken::from_static(text) {
-            Err(SfTokenError::InvalidCharacter { source }) => {
+        match Token::from_static(text) {
+            Err(TokenError::InvalidCharacter { source }) => {
                 assert_eq!((source.index(), source.byte()), (index, byte), "{text}");
             }
             other => panic!("{text}: {other:?}"),
         }
     }
     assert!(matches!(
-        SfToken::new(Bytes::from_static(b"ab\xff")),
-        Err(SfTokenError::InvalidCharacter { source }) if source.index() == 2 && source.byte() == 0xff
+        Token::new(Bytes::from_static(b"ab\xff")),
+        Err(TokenError::InvalidCharacter { source }) if source.index() == 2 && source.byte() == 0xff
     ));
 }
 
 #[test]
 fn error_display_and_source() {
-    assert_eq!(SfTokenError::Empty.to_string(), "a token is empty");
-    assert!(SfTokenError::Empty.source().is_none());
+    assert_eq!(TokenError::Empty.to_string(), "a token is empty");
+    assert!(TokenError::Empty.source().is_none());
 
-    let start = SfToken::from_static("1").unwrap_err();
+    let start = Token::from_static("1").unwrap_err();
     assert_eq!(
         start.to_string(),
         "a token starts with a byte that cannot start it"
@@ -120,7 +120,7 @@ fn error_display_and_source() {
         "byte 0x31 is not a letter or `*`"
     );
 
-    let character = SfToken::from_static("a b").unwrap_err();
+    let character = Token::from_static("a b").unwrap_err();
     assert_eq!(
         character.to_string(),
         "a token holds a byte that cannot be in it"
@@ -136,7 +136,7 @@ fn accessors_and_formatting() {
     let token = token("text/html");
     assert_eq!(token.as_str(), "text/html");
     assert_eq!(token.to_string(), "text/html");
-    assert_eq!(format!("{token:?}"), "SfToken(text/html)");
+    assert_eq!(format!("{token:?}"), "Token(text/html)");
     assert_eq!(&token.clone().into_bytes()[..], b"text/html");
     let mut out = Vec::new();
     token.serialize(&mut out);

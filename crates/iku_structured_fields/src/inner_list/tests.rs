@@ -1,5 +1,5 @@
 use super::*;
-use crate::{BareItem, Integer, Key, SfString, SfToken};
+use crate::{BareItem, Integer, Key, Token};
 use alloc::string::String;
 use bytes::Bytes;
 
@@ -40,15 +40,15 @@ fn parses_items() {
     assert_eq!(
         list.items(),
         [
-            Item::new(BareItem::String(SfString::from_static("foo").unwrap())),
-            Item::new(BareItem::String(SfString::from_static("bar").unwrap())),
+            Item::new(BareItem::String(crate::String::from_static("foo").unwrap())),
+            Item::new(BareItem::String(crate::String::from_static("bar").unwrap())),
         ]
     );
     let list = ok("(abc_123)");
     assert_eq!(
         list.items(),
         [Item::new(BareItem::Token(
-            SfToken::from_static("abc_123").unwrap()
+            Token::from_static("abc_123").unwrap()
         ))]
     );
 }

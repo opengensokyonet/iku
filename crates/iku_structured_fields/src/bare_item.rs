@@ -2,13 +2,12 @@
 
 use crate::date::Date;
 use crate::number::{Decimal, Integer, Number, parse_number};
-use crate::string::SfString;
+use crate::string;
 use crate::syntax::{
     DecimalDateSnafu, InvalidBareItemStartSnafu, InvalidBooleanSnafu, Parser, SyntaxError,
 };
-use crate::token::{SfToken, is_token_start};
+use crate::token::{Token, is_token_start};
 use crate::{byte_sequence, display_string};
-use alloc::string::String;
 use alloc::vec::Vec;
 use bytes::Bytes;
 
@@ -21,9 +20,9 @@ pub enum BareItem {
     /// A decimal (§3.3.2).
     Decimal(Decimal),
     /// A string of visible ASCII (§3.3.3).
-    String(SfString),
+    String(string::String),
     /// A token (§3.3.4).
-    Token(SfToken),
+    Token(Token),
     /// A byte sequence (§3.3.5), decoded.
     ByteSequence(Bytes),
     /// A boolean (§3.3.6).
@@ -31,7 +30,7 @@ pub enum BareItem {
     /// A date (§3.3.7).
     Date(Date),
     /// A display string (§3.3.8), decoded: any Unicode text.
-    DisplayString(String),
+    DisplayString(alloc::string::String),
 }
 
 impl BareItem {
@@ -43,8 +42,8 @@ impl BareItem {
                 Number::Integer(integer) => Self::Integer(integer),
                 Number::Decimal(decimal) => Self::Decimal(decimal),
             }),
-            Some(b'"') => SfString::parse(parser).map(Self::String),
-            Some(byte) if is_token_start(byte) => Ok(Self::Token(SfToken::parse(parser))),
+            Some(b'"') => string::String::parse(parser).map(Self::String),
+            Some(byte) if is_token_start(byte) => Ok(Self::Token(Token::parse(parser))),
             Some(b':') => byte_sequence::parse(parser).map(Self::ByteSequence),
             Some(b'?') => {
                 parser.advance();
@@ -101,14 +100,14 @@ impl From<Decimal> for BareItem {
     }
 }
 
-impl From<SfString> for BareItem {
-    fn from(string: SfString) -> Self {
+impl From<string::String> for BareItem {
+    fn from(string: string::String) -> Self {
         Self::String(string)
     }
 }
 
-impl From<SfToken> for BareItem {
-    fn from(token: SfToken) -> Self {
+impl From<Token> for BareItem {
+    fn from(token: Token) -> Self {
         Self::Token(token)
     }
 }

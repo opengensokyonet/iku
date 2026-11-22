@@ -2,9 +2,9 @@ use super::*;
 use alloc::format;
 use alloc::string::ToString;
 
-fn parse(input: &'static [u8]) -> (Result<SfString, SyntaxError>, Bytes) {
+fn parse(input: &'static [u8]) -> (Result<String, SyntaxError>, Bytes) {
     let mut parser = Parser::new(Bytes::from_static(input));
-    let result = SfString::parse(&mut parser);
+    let result = String::parse(&mut parser);
     (result, Bytes::copy_from_slice(parser.rest()))
 }
 
@@ -14,23 +14,25 @@ fn parsed(input: &'static [u8]) -> alloc::string::String {
 
 fn serialized(text: &'static str) -> alloc::string::String {
     let mut out = Vec::new();
-    SfString::from_static(text).unwrap().serialize(&mut out);
+    crate::String::from_static(text)
+        .unwrap()
+        .serialize(&mut out);
     alloc::string::String::from_utf8(out).unwrap()
 }
 
 #[test]
 fn new_accepts_visible_ascii_and_space() {
     let all: Vec<u8> = (0x20..=0x7e).collect();
-    let string = SfString::new(Bytes::from(all.clone())).unwrap();
+    let string = crate::String::new(Bytes::from(all.clone())).unwrap();
     assert_eq!(string.as_str().as_bytes(), &all[..]);
-    assert_eq!(SfString::from_static("").unwrap().as_str(), "");
-    assert_eq!(SfString::from_static(" ").unwrap().as_str(), " ");
+    assert_eq!(crate::String::from_static("").unwrap().as_str(), "");
+    assert_eq!(crate::String::from_static(" ").unwrap().as_str(), " ");
     assert_eq!(
-        SfString::from_static("hello world").unwrap().as_str(),
+        crate::String::from_static("hello world").unwrap().as_str(),
         "hello world"
     );
     assert_eq!(
-        SfString::from_static("a\"b\\c").unwrap().as_str(),
+        crate::String::from_static("a\"b\\c").unwrap().as_str(),
         "a\"b\\c"
     );
 }
@@ -38,18 +40,18 @@ fn new_accepts_visible_ascii_and_space() {
 #[test]
 fn new_rejects_other_bytes() {
     for byte in [0x00, 0x09, 0x0a, 0x0d, 0x1f, 0x7f, 0x80, 0xc3, 0xff] {
-        let error = SfString::new(Bytes::from(alloc::vec![b'a', byte])).unwrap_err();
+        let error = crate::String::new(Bytes::from(alloc::vec![b'a', byte])).unwrap_err();
         assert_eq!(error.index(), 1, "{byte:#x}");
         assert_eq!(error.byte(), byte);
     }
-    let error = SfString::new(Bytes::from_static(b"ab\x00cd\x01")).unwrap_err();
+    let error = crate::String::new(Bytes::from_static(b"ab\x00cd\x01")).unwrap_err();
     assert_eq!((error.index(), error.byte()), (2, 0));
-    assert!(SfString::from_static("café").is_err());
+    assert!(crate::String::from_static("café").is_err());
 }
 
 #[test]
 fn character_error_display() {
-    let error = SfString::new(Bytes::from_static(b"a\x7f")).unwrap_err();
+    let error = crate::String::new(Bytes::from_static(b"a\x7f")).unwrap_err();
     assert_eq!(
         error.to_string(),
         "byte 0x7f at 1 is not visible ASCII or a space"
@@ -58,13 +60,13 @@ fn character_error_display() {
 
 #[test]
 fn accessors_and_formatting() {
-    let string = SfString::from_static("a b").unwrap();
+    let string = crate::String::from_static("a b").unwrap();
     assert_eq!(string.as_str(), "a b");
     assert_eq!(string.to_string(), "a b");
-    assert_eq!(format!("{string:?}"), "SfString(\"a b\")");
+    assert_eq!(format!("{string:?}"), "String(\"a b\")");
     assert_eq!(&string.clone().into_bytes()[..], b"a b");
-    assert_eq!(string, SfString::from_static("a b").unwrap());
-    assert!(SfString::from_static("a").unwrap() < SfString::from_static("b").unwrap());
+    assert_eq!(string, crate::String::from_static("a b").unwrap());
+    assert!(crate::String::from_static("a").unwrap() < crate::String::from_static("b").unwrap());
 }
 
 #[test]
@@ -176,10 +178,10 @@ fn serializes_with_escapes() {
 
 #[test]
 fn serialize_then_parse_round_trips() {
-    let string = SfString::from_static("it's \"quoted\" and \\ slashed").unwrap();
+    let string = crate::String::from_static("it's \"quoted\" and \\ slashed").unwrap();
     let mut out = Vec::new();
     string.serialize(&mut out);
     let mut parser = Parser::new(Bytes::from(out));
-    assert_eq!(SfString::parse(&mut parser).unwrap(), string);
+    assert_eq!(String::parse(&mut parser).unwrap(), string);
     assert!(parser.is_empty());
 }

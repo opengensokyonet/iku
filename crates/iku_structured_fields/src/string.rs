@@ -1,8 +1,6 @@
 //! Strings (RFC 9651 §3.3.3).
 
-use crate::syntax::{
-    InvalidStringCharacterSnafu, InvalidStringEscapeSnafu, Parser, SyntaxError, UnclosedStringSnafu,
-};
+use crate::syntax::{self, InvalidStringEscapeSnafu, Parser, SyntaxError, UnclosedStringSnafu};
 use alloc::vec::Vec;
 use bytes::Bytes;
 use core::fmt;
@@ -12,17 +10,17 @@ use snafu::Snafu;
 ///
 /// Text beyond ASCII is a display string (§3.3.8).
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct SfString(Bytes);
+pub struct String(Bytes);
 
-impl SfString {
+impl String {
     /// Checks that `bytes` are visible ASCII characters and spaces.
     ///
     /// # Errors
     ///
-    /// [`InvalidSfStringCharacterError`] for the first byte that is neither.
-    pub fn new(bytes: Bytes) -> Result<Self, InvalidSfStringCharacterError> {
+    /// [`InvalidStringCharacterError`] for the first byte that is neither.
+    pub fn new(bytes: Bytes) -> Result<Self, InvalidStringCharacterError> {
         match bytes.iter().position(|&byte| !is_string_character(byte)) {
-            Some(index) => Err(InvalidSfStringCharacterError {
+            Some(index) => Err(InvalidStringCharacterError {
                 index,
                 byte: bytes[index],
             }),
@@ -30,12 +28,12 @@ impl SfString {
         }
     }
 
-    /// As [`SfString::new`], without copying `text`.
+    /// As [`String::new`], without copying `text`.
     ///
     /// # Errors
     ///
-    /// As [`SfString::new`].
-    pub fn from_static(text: &'static str) -> Result<Self, InvalidSfStringCharacterError> {
+    /// As [`String::new`].
+    pub fn from_static(text: &'static str) -> Result<Self, InvalidStringCharacterError> {
         Self::new(Bytes::from_static(text.as_bytes()))
     }
 
@@ -91,7 +89,7 @@ impl SfString {
                         characters.push(byte);
                     }
                 }
-                _ => return InvalidStringCharacterSnafu { index }.fail(),
+                _ => return syntax::InvalidStringCharacterSnafu { index }.fail(),
             }
         }
     }
@@ -109,15 +107,15 @@ impl SfString {
     }
 }
 
-impl fmt::Display for SfString {
+impl fmt::Display for String {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl fmt::Debug for SfString {
+impl fmt::Debug for String {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SfString({:?})", self.as_str())
+        write!(f, "String({:?})", self.as_str())
     }
 }
 
@@ -132,12 +130,12 @@ const fn is_string_character(byte: u8) -> bool {
 /// It is constructed only when the check fails, so its byte is never one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
 #[snafu(display("byte {byte:#04x} at {index} is not visible ASCII or a space"))]
-pub struct InvalidSfStringCharacterError {
+pub struct InvalidStringCharacterError {
     index: usize,
     byte: u8,
 }
 
-impl InvalidSfStringCharacterError {
+impl InvalidStringCharacterError {
     /// Where the byte is, counted from the start of the string.
     pub const fn index(self) -> usize {
         self.index

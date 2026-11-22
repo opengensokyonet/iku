@@ -1,5 +1,5 @@
 use super::*;
-use crate::{Decimal, Integer, Key, SfString, SfToken};
+use crate::{Decimal, Integer, Key, Token};
 use alloc::string::{String, ToString};
 
 fn fv(text: &'static str) -> FieldValue {
@@ -39,11 +39,11 @@ fn parses_the_items_of_rfc_9651() {
     );
     assert_eq!(
         parse("\"hello world\"").bare_item(),
-        &BareItem::String(SfString::from_static("hello world").unwrap())
+        &BareItem::String(crate::String::from_static("hello world").unwrap())
     );
     assert_eq!(
         parse("foo123/456").bare_item(),
-        &BareItem::Token(SfToken::from_static("foo123/456").unwrap())
+        &BareItem::Token(Token::from_static("foo123/456").unwrap())
     );
     assert_eq!(parse("?1").bare_item(), &BareItem::Boolean(true));
     assert_eq!(

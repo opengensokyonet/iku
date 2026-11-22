@@ -12,26 +12,26 @@ use snafu::Snafu;
 /// It is not the token of RFC 9110 §5.6.2: it cannot start with a digit or
 /// most symbols, and it can hold `:` and `/`.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct SfToken(Bytes);
+pub struct Token(Bytes);
 
-impl SfToken {
+impl Token {
     /// Checks that `bytes` is a token.
     ///
     /// # Errors
     ///
-    /// [`SfTokenError`] for the rule that `bytes` breaks.
-    pub fn new(bytes: Bytes) -> Result<Self, SfTokenError> {
+    /// [`TokenError`] for the rule that `bytes` breaks.
+    pub fn new(bytes: Bytes) -> Result<Self, TokenError> {
         let Some(&first) = bytes.first() else {
-            return Err(SfTokenError::Empty);
+            return Err(TokenError::Empty);
         };
         if !is_token_start(first) {
-            return Err(SfTokenError::InvalidStart {
-                source: InvalidSfTokenStartError { byte: first },
+            return Err(TokenError::InvalidStart {
+                source: InvalidTokenStartError { byte: first },
             });
         }
         match bytes.iter().position(|&byte| !is_token_character(byte)) {
-            Some(index) => Err(SfTokenError::InvalidCharacter {
-                source: InvalidSfTokenCharacterError {
+            Some(index) => Err(TokenError::InvalidCharacter {
+                source: InvalidTokenCharacterError {
                     index,
                     byte: bytes[index],
                 },
@@ -40,12 +40,12 @@ impl SfToken {
         }
     }
 
-    /// As [`SfToken::new`], without copying `text`.
+    /// As [`Token::new`], without copying `text`.
     ///
     /// # Errors
     ///
-    /// As [`SfToken::new`].
-    pub fn from_static(text: &'static str) -> Result<Self, SfTokenError> {
+    /// As [`Token::new`].
+    pub fn from_static(text: &'static str) -> Result<Self, TokenError> {
         Self::new(Bytes::from_static(text.as_bytes()))
     }
 
@@ -73,15 +73,15 @@ impl SfToken {
     }
 }
 
-impl fmt::Display for SfToken {
+impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl fmt::Debug for SfToken {
+impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SfToken({})", self.as_str())
+        write!(f, "Token({})", self.as_str())
     }
 }
 
@@ -117,7 +117,7 @@ const fn is_token_character(byte: u8) -> bool {
 
 /// The bytes are not a token (RFC 9651 §3.3.4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
-pub enum SfTokenError {
+pub enum TokenError {
     /// A token has at least one character.
     #[snafu(display("a token is empty"))]
     Empty,
@@ -125,13 +125,13 @@ pub enum SfTokenError {
     #[snafu(display("a token starts with a byte that cannot start it"))]
     InvalidStart {
         /// Which byte.
-        source: InvalidSfTokenStartError,
+        source: InvalidTokenStartError,
     },
     /// A later byte cannot be in a token.
     #[snafu(display("a token holds a byte that cannot be in it"))]
     InvalidCharacter {
         /// Which byte, and where.
-        source: InvalidSfTokenCharacterError,
+        source: InvalidTokenCharacterError,
     },
 }
 
@@ -140,11 +140,11 @@ pub enum SfTokenError {
 /// It is constructed only when the check fails, so its byte is never one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
 #[snafu(display("byte {byte:#04x} is not a letter or `*`"))]
-pub struct InvalidSfTokenStartError {
+pub struct InvalidTokenStartError {
     byte: u8,
 }
 
-impl InvalidSfTokenStartError {
+impl InvalidTokenStartError {
     /// The first byte, which is not a letter or `*`.
     pub const fn byte(self) -> u8 {
         self.byte
@@ -158,12 +158,12 @@ impl InvalidSfTokenStartError {
 /// its index is never 0.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
 #[snafu(display("byte {byte:#04x} at {index} is not a `tchar`, `:` or `/`"))]
-pub struct InvalidSfTokenCharacterError {
+pub struct InvalidTokenCharacterError {
     index: usize,
     byte: u8,
 }
 
-impl InvalidSfTokenCharacterError {
+impl InvalidTokenCharacterError {
     /// Where the byte is, counted from the start; never 0.
     pub const fn index(self) -> usize {
         self.index
