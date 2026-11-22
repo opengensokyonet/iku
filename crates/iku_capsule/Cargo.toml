@@ -1,0 +1,15 @@
+[package]
+name = "iku_capsule"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "The Capsule Protocol (RFC 9297 §3): capsules read and written as nitori calls"
+
+[dependencies]
+iku_semantics.workspace = true
+iku_structured_fields.workspace = true
+bytes.workspace = true
+snafu.workspace = true
+nitori_call.workspace = true
+nitori_io.workspace = true

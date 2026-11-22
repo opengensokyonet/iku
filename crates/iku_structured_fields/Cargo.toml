@@ -1,0 +1,12 @@
+[package]
+name = "iku_structured_fields"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Structured field values for HTTP (RFC 9651), parsed and serialized with checked types"
+
+[dependencies]
+iku_semantics.workspace = true
+bytes.workspace = true
+snafu.workspace = true
