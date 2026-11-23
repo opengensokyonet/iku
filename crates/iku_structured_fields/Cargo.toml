@@ -10,3 +10,6 @@ description = "Structured field values for HTTP (RFC 9651), parsed and serialize
 iku_semantics.workspace = true
 bytes.workspace = true
 snafu.workspace = true
+
+[dev-dependencies]
+serde_json = "1.0.154"
