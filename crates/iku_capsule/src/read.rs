@@ -1,16 +1,16 @@
 //! Reading capsules from a data stream (RFC 9297 §3.2, §3.3).
 
 use crate::capsule_type::{CapsuleHeader, CapsuleType};
-use crate::var_int::{ReadVarIntRestExt, read_var_int_rest};
 use bytes::{Bytes, BytesMut};
 use core::num::NonZeroUsize;
 use core::ops::ControlFlow;
 use core::pin::pin;
 use nitori_call::{ReceiverAccess, call};
 use nitori_io::{
-    calls::{ReadArrayError, ReadChunksExactError, ReadExactError},
+    calls::{ReadChunksExactError, ReadExactError},
     prelude::*,
 };
+use sakuya_var_int::call::{ReadVarIntError, ReadVarIntExt as _};
 use snafu::{ResultExt, Snafu};
 
 /// Reads the header of the next capsule: `None` when the stream ends before
@@ -23,16 +23,15 @@ use snafu::{ResultExt, Snafu};
 pub async fn read_capsule_header<F: Read, A: ReceiverAccess<Family = F>>(
     io: &mut A,
 ) -> Result<Option<CapsuleHeader>, ReadCapsuleHeaderError<F::Error>> {
-    let first = match io.read_array::<1>().await {
-        Ok([first]) => first,
-        Err(ReadArrayError::Incomplete { .. }) => return Ok(None),
+    let capsule_type = match io.read_var_int().await {
+        Ok(capsule_type) => capsule_type,
+        // The stream ended before the first byte of the header.
+        Err(error) if error.is_incomplete() && error.completed() == 0 => return Ok(None),
         Err(source) => return Err(ReadCapsuleHeaderError::Type { source }),
     };
-    let capsule_type = read_var_int_rest(io, first).await.context(TypeSnafu)?;
-    let [first] = io.read_array::<1>().await.context(LengthSnafu)?;
-    let length = io.read_var_int_rest(first).await.context(LengthSnafu)?;
-    Ok(Some(CapsuleHeader::from_var_ints(
-        CapsuleType::from_var_int(capsule_type),
+    let length = io.read_var_int().await.context(LengthSnafu)?;
+    Ok(Some(CapsuleHeader::new(
+        CapsuleType::new(capsule_type),
         length,
     )))
 }
@@ -46,14 +45,14 @@ pub enum ReadCapsuleHeaderError<E> {
     #[snafu(display("could not read the capsule type"))]
     Type {
         /// Why.
-        source: ReadArrayError<E>,
+        source: ReadVarIntError<E>,
     },
     /// The Capsule Length could not be read: the stream ended before or
     /// inside it, or reading failed.
     #[snafu(display("could not read the capsule length"))]
     Length {
         /// Why.
-        source: ReadArrayError<E>,
+        source: ReadVarIntError<E>,
     },
 }
 
@@ -69,7 +68,7 @@ pub async fn read_capsule_value<F: ReadChunk, A: ReceiverAccess<Family = F>>(
     header: CapsuleHeader,
     chunk_maximum: NonZeroUsize,
 ) -> Result<(), ReadCapsuleValueError<F::Error>> {
-    let length = header.length();
+    let length = header.length().get();
     let Ok(length) = usize::try_from(length) else {
         return LengthTooLargeSnafu { length }.fail();
     };
@@ -115,7 +114,7 @@ pub async fn collect_capsule_value<F: ReadChunk, A: ReceiverAccess<Family = F>>(
     maximum: usize,
     chunk_maximum: NonZeroUsize,
 ) -> Result<Option<Bytes>, CollectCapsuleValueError<F::Error>> {
-    match usize::try_from(header.length()) {
+    match usize::try_from(header.length().get()) {
         Ok(length) if length <= maximum => {
             let mut value = BytesMut::with_capacity(length);
             io.read_exact(&mut value, length)

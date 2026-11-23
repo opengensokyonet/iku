@@ -1,9 +1,13 @@
 use super::*;
 use crate::{CapsuleType, ReadCapsuleHeaderHostExt};
 use alloc::vec::Vec;
+use sakuya_var_int::VarInt;
 
 fn header(capsule_type: u64, length: u64) -> CapsuleHeader {
-    CapsuleHeader::new(CapsuleType::new(capsule_type).unwrap(), length).unwrap()
+    CapsuleHeader::new(
+        CapsuleType::new(VarInt::new(capsule_type).unwrap()),
+        VarInt::new(length).unwrap(),
+    )
 }
 
 fn written(header: CapsuleHeader) -> Vec<u8> {

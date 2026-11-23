@@ -33,13 +33,10 @@ mod fields;
 // without documentation; the functions they come from are documented.
 #[allow(missing_docs)]
 mod read;
-mod var_int;
 #[allow(missing_docs)]
 mod write;
 
-pub use capsule_type::{
-    CapsuleHeader, CapsuleLengthOutOfRangeError, CapsuleType, CapsuleTypeOutOfRangeError,
-};
+pub use capsule_type::{CapsuleHeader, CapsuleType};
 pub use fields::{
     CapsuleMessageFieldError, capsule_protocol_field_name, capsule_protocol_field_value,
     check_capsule_message_fields, uses_capsule_protocol,

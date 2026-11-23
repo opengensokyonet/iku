@@ -13,3 +13,4 @@ bytes.workspace = true
 snafu.workspace = true
 nitori_call.workspace = true
 nitori_io.workspace = true
+sakuya_var_int.workspace = true

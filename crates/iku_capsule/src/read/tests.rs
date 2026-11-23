@@ -2,13 +2,17 @@ use super::*;
 use alloc::{string::ToString, vec, vec::Vec};
 use bytes::Buf;
 use nitori_io::error::IncompleteError;
+use sakuya_var_int::VarInt;
 
 fn nz(n: usize) -> NonZeroUsize {
     NonZeroUsize::new(n).unwrap()
 }
 
 fn header(capsule_type: u64, length: u64) -> CapsuleHeader {
-    CapsuleHeader::new(CapsuleType::new(capsule_type).unwrap(), length).unwrap()
+    CapsuleHeader::new(
+        CapsuleType::new(VarInt::new(capsule_type).unwrap()),
+        VarInt::new(length).unwrap(),
+    )
 }
 
 /// Collects the chunks that `read_capsule_value` yields, each as bytes.
@@ -34,13 +38,13 @@ fn smoke() {
     let mut input = bytes;
     let header = input.sync_read_capsule_header_unpin().unwrap().unwrap();
     assert_eq!(header.capsule_type(), CapsuleType::DATAGRAM);
-    assert_eq!(header.length(), 3);
+    assert_eq!(header.length().get(), 3);
     let value = input
         .sync_collect_capsule_value_unpin(header, 16, NonZeroUsize::new(2).unwrap())
         .unwrap();
     assert_eq!(value.as_deref(), Some(&b"abc"[..]));
     let header = input.sync_read_capsule_header_unpin().unwrap().unwrap();
-    assert_eq!(header.capsule_type().get(), 0x25);
+    assert_eq!(header.capsule_type().get().get(), 0x25);
     let value = input
         .sync_collect_capsule_value_unpin(header, 1, NonZeroUsize::new(1).unwrap())
         .unwrap();
@@ -70,7 +74,7 @@ fn header_reads_consecutive_capsules() {
     while let Some(h) = input.sync_read_capsule_header_unpin().unwrap() {
         headers.push(h);
         // skip the value
-        let n = h.length() as usize;
+        let n = h.length().get() as usize;
         input = &input[n..];
     }
     assert_eq!(headers, [header(0, 2), header(0x25, 1), header(0x4000, 0)]);
@@ -123,8 +127,8 @@ fn header_non_minimal_encodings_accepted() {
 fn header_unknown_type_is_read() {
     let mut input: &[u8] = &[0x3f, 0x02, 0xaa, 0xbb];
     let h = input.sync_read_capsule_header_unpin().unwrap().unwrap();
-    assert_eq!(h.capsule_type().get(), 0x3f);
-    assert_eq!(h.length(), 2);
+    assert_eq!(h.capsule_type().get().get(), 0x3f);
+    assert_eq!(h.length().get(), 2);
     let chunks = input.sync_value_chunks_unpin(h, nz(8)).unwrap();
     assert_eq!(chunks, [vec![0xaa, 0xbb]]);
 }
@@ -138,7 +142,7 @@ fn header_truncated_type_is_type_error() {
             matches!(
                 error,
                 ReadCapsuleHeaderError::Type {
-                    source: ReadArrayError::Incomplete { .. }
+                    source: ReadVarIntError::Incomplete { .. }
                 }
             ),
             "{bytes:02x?}"
@@ -151,7 +155,7 @@ fn header_end_before_length_is_length_error() {
     let mut input: &[u8] = &[0x00];
     let error = input.sync_read_capsule_header_unpin().unwrap_err();
     let ReadCapsuleHeaderError::Length {
-        source: ReadArrayError::Incomplete { source },
+        source: ReadVarIntError::Incomplete { source },
     } = error
     else {
         panic!("not an incomplete length: {error:?}");
@@ -172,7 +176,7 @@ fn header_truncated_length_is_length_error() {
             matches!(
                 error,
                 ReadCapsuleHeaderError::Length {
-                    source: ReadArrayError::Incomplete { .. }
+                    source: ReadVarIntError::Incomplete { .. }
                 }
             ),
             "{bytes:02x?}"
@@ -402,7 +406,7 @@ fn collect_truncated_discard_is_discard_error() {
 fn collect_unknown_type_is_read_like_any() {
     let mut input: &[u8] = &[0x7f, 0xff, 0x02, 1, 2];
     let h = input.sync_read_capsule_header_unpin().unwrap().unwrap();
-    assert_eq!(h.capsule_type().get(), 0x3fff);
+    assert_eq!(h.capsule_type().get().get(), 0x3fff);
     let value = input.sync_collect_capsule_value_unpin(h, 8, nz(8)).unwrap();
     assert_eq!(value.as_deref(), Some(&[1u8, 2][..]));
 }
@@ -423,10 +427,24 @@ fn incomplete_error_type_is_nitori_io() {
     let mut input: &[u8] = &[0x40];
     let error = input.sync_read_capsule_header_unpin().unwrap_err();
     let ReadCapsuleHeaderError::Type {
-        source: ReadArrayError::Incomplete { source },
+        source: ReadVarIntError::Incomplete { source },
     } = error
     else {
         panic!();
     };
     let _: IncompleteError = source;
+}
+
+#[test]
+fn header_truncated_length_counts_the_whole_encoding() {
+    // The length announces four bytes; two of them are there.
+    let mut input: &[u8] = &[0x00, 0x80, 0x01];
+    let error = input.sync_read_capsule_header_unpin().unwrap_err();
+    let ReadCapsuleHeaderError::Length {
+        source: ReadVarIntError::Incomplete { source },
+    } = error
+    else {
+        panic!("not an incomplete length: {error:?}");
+    };
+    assert_eq!((source.expected(), source.completed()), (4, 2));
 }

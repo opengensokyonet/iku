@@ -19,7 +19,7 @@ No package uses the standard library; all need `alloc`.
 
 Install [rustup](https://rustup.rs/). The repository pins `nightly-2026-11-03` with rustfmt, Clippy and the `x86_64-unknown-none` target in `rust-toolchain.toml`, the toolchain that the other Open Gensokyo Network repositories use; run commands from the repository root so rustup selects this toolchain. `iku_capsule` uses the nightly features `impl_trait_in_assoc_type` and `yield_expr`, which crates that define `nitori_call` operations enable; the other packages use none. Packages remain unpublished (`publish = false`).
 
-`snafu`, `nitori_call` and `nitori_io` are Git dependencies pinned to specific commits in `Cargo.toml`; Cargo fetches them automatically.
+`snafu`, `nitori_call`, `nitori_io` and `sakuya_var_int` (the QUIC variable-length integers that the Capsule Type and Length use, from the sakuya repository) are Git dependencies pinned to specific commits in `Cargo.toml`; Cargo fetches them automatically.
 
 From the repository root:
 
@@ -36,7 +36,7 @@ for package in iku_semantics iku_structured_fields iku_capsule; do cargo build -
 
 The last command checks that the packages, and with them `iku_uri`, build without the standard library.
 
-For development against local checkouts of SNAFU or nitori, an ignored `.cargo/config.toml` may patch their Git sources to local paths under `[patch."https://github.com/opengensokyonet/snafu"]` and `[patch."https://github.com/opengensokyonet/nitori"]`. Keep that configuration and the resulting lockfile changes out of commits; the committed lockfile records the public sources.
+For development against local checkouts of SNAFU, nitori or sakuya, an ignored `.cargo/config.toml` may patch their Git sources to local paths under `[patch."https://github.com/opengensokyonet/snafu"]`, `[patch."https://github.com/opengensokyonet/nitori"]` and `[patch."https://github.com/opengensokyonet/sakuya"]`. Keep that configuration and the resulting lockfile changes out of commits; the committed lockfile records the public sources.
 
 ## License
 
