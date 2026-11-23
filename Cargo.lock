@@ -92,7 +92,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "nitori_call"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=081472d9b29894c92b5d3a648763ce66e17e1d77#081472d9b29894c92b5d3a648763ce66e17e1d77"
+source = "git+https://github.com/opengensokyonet/nitori?rev=e6ed71c8577018dc33086881be8c72d64a9c9424#e6ed71c8577018dc33086881be8c72d64a9c9424"
 dependencies = [
  "bytes",
  "futures-core",
@@ -104,7 +104,7 @@ dependencies = [
 [[package]]
 name = "nitori_call_macros"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=081472d9b29894c92b5d3a648763ce66e17e1d77#081472d9b29894c92b5d3a648763ce66e17e1d77"
+source = "git+https://github.com/opengensokyonet/nitori?rev=e6ed71c8577018dc33086881be8c72d64a9c9424#e6ed71c8577018dc33086881be8c72d64a9c9424"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -114,7 +114,7 @@ dependencies = [
 [[package]]
 name = "nitori_io"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=081472d9b29894c92b5d3a648763ce66e17e1d77#081472d9b29894c92b5d3a648763ce66e17e1d77"
+source = "git+https://github.com/opengensokyonet/nitori?rev=e6ed71c8577018dc33086881be8c72d64a9c9424#e6ed71c8577018dc33086881be8c72d64a9c9424"
 dependencies = [
  "bytes",
  "nitori_call",
@@ -149,7 +149,7 @@ dependencies = [
 [[package]]
 name = "sakuya_var_int"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/sakuya?rev=637fcaf4366645db0618165419dac4ca082e06cd#637fcaf4366645db0618165419dac4ca082e06cd"
+source = "git+https://github.com/opengensokyonet/sakuya?rev=a37526085f3be89580734726594efc45237546c8#a37526085f3be89580734726594efc45237546c8"
 dependencies = [
  "bytes",
  "nitori_call",
