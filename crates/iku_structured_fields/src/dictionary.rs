@@ -3,6 +3,7 @@
 use crate::bare_item::BareItem;
 use crate::item::Item;
 use crate::key::Key;
+use crate::keyed_members::KeyedMembers;
 use crate::lines::{FieldLinesError, LineMembers, next_member};
 use crate::list::ListMember;
 use crate::parameters::Parameters;
@@ -103,11 +104,11 @@ impl Dictionary {
     pub fn from_field_value(value: &FieldValue) -> Result<Self, SyntaxError> {
         let mut parser = Parser::new(value.clone().into_bytes());
         let mut after_member = false;
-        let mut dictionary = Self::new();
+        let mut members = KeyedMembers::new();
         while let Some((key, value)) = next_member(&mut parser, &mut after_member, parse_entry)? {
-            dictionary.insert(key, value);
+            members.push(key, value);
         }
-        Ok(dictionary)
+        Ok(Self(members.into_members()))
     }
 
     /// The dictionary as a field value (§4.1); `None` when it is empty, since
@@ -157,11 +158,7 @@ impl FromIterator<(Key, ListMember)> for Dictionary {
     /// Collects the members; a later value of a key replaces the earlier one
     /// in its place.
     fn from_iter<I: IntoIterator<Item = (Key, ListMember)>>(iter: I) -> Self {
-        let mut dictionary = Self::new();
-        for (key, value) in iter {
-            dictionary.insert(key, value);
-        }
-        dictionary
+        Self(iter.into_iter().collect::<KeyedMembers<_>>().into_members())
     }
 }
 

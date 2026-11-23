@@ -1,7 +1,6 @@
 //! The cursor that the parsers share (RFC 9651 §4.2), and the syntax errors
 //! they report.
 
-use alloc::vec::Vec;
 use bytes::Bytes;
 use snafu::Snafu;
 
@@ -74,23 +73,6 @@ impl Parser {
     pub(crate) fn skip(&mut self, count: usize) {
         self.index = (self.index + count).min(self.bytes.len());
     }
-}
-
-/// Writes `number` in decimal, without leading zeros.
-pub(crate) fn put_decimal(out: &mut Vec<u8>, number: u64) {
-    let mut digits = [0u8; 20];
-    let mut start = digits.len();
-    let mut rest = number;
-    loop {
-        start -= 1;
-        // `rest % 10` is a single digit.
-        digits[start] = b'0' + (rest % 10) as u8;
-        rest /= 10;
-        if rest == 0 {
-            break;
-        }
-    }
-    out.extend_from_slice(&digits[start..]);
 }
 
 /// A field line is not a structured field of the expected type (RFC 9651

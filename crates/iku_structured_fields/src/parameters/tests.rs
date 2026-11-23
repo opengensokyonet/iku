@@ -210,3 +210,40 @@ fn parse_then_serialize_is_canonical() {
         ";q=0.5;r=\"+w\";s"
     );
 }
+
+#[test]
+fn many_parameters_with_repeated_keys_keep_the_rules() {
+    // 4000 keys, then every third key again with another value.
+    let mut input = String::new();
+    for i in 0..4000 {
+        input.push_str(&alloc::format!(";p{i}={i}"));
+    }
+    for i in (0..4000).step_by(3) {
+        input.push_str(&alloc::format!(";p{i}"));
+    }
+    let mut parser = Parser::new(Bytes::from(input));
+    let parameters = Parameters::parse(&mut parser).unwrap();
+    assert!(parser.is_empty());
+    assert_eq!(parameters.len(), 4000);
+    for (i, (key, value)) in parameters.iter().enumerate() {
+        assert_eq!(key.as_str(), alloc::format!("p{i}"));
+        let expected = if i % 3 == 0 {
+            BareItem::Boolean(true)
+        } else {
+            int(i64::try_from(i).unwrap())
+        };
+        assert_eq!(*value, expected, "p{i}");
+    }
+
+    // The same as inserting every occurrence in order.
+    let mut inserted = Parameters::new();
+    for i in 0..4000 {
+        let key = Key::new(Bytes::from(alloc::format!("p{i}"))).unwrap();
+        inserted.insert(key, int(i));
+    }
+    for i in (0..4000).step_by(3) {
+        let key = Key::new(Bytes::from(alloc::format!("p{i}"))).unwrap();
+        inserted.insert(key, BareItem::Boolean(true));
+    }
+    assert_eq!(parameters, inserted);
+}

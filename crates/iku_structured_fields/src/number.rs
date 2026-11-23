@@ -3,8 +3,9 @@
 
 use crate::syntax::{
     EmptyFractionSnafu, FractionTooLongSnafu, IntegerPartTooLongSnafu, IntegerTooLongSnafu,
-    MissingDigitSnafu, Parser, SyntaxError, put_decimal,
+    MissingDigitSnafu, Parser, SyntaxError,
 };
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::fmt;
 use snafu::Snafu;
@@ -41,10 +42,7 @@ impl Integer {
     }
 
     pub(crate) fn serialize(self, out: &mut Vec<u8>) {
-        if self.0 < 0 {
-            out.push(b'-');
-        }
-        put_decimal(out, self.0.unsigned_abs());
+        out.extend_from_slice(self.0.to_string().as_bytes());
     }
 }
 
@@ -105,7 +103,7 @@ impl Decimal {
             out.push(b'-');
         }
         let magnitude = self.0.unsigned_abs();
-        put_decimal(out, magnitude / 1000);
+        out.extend_from_slice((magnitude / 1000).to_string().as_bytes());
         out.push(b'.');
         let mut fraction = magnitude % 1000;
         if fraction == 0 {

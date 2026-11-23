@@ -1,8 +1,8 @@
 //! The `Content-Length` field (RFC 9110 §8.6).
 
-use crate::decimal::put_decimal;
 use crate::field::{FieldName, FieldSection, FieldValue};
 use bytes::BytesMut;
+use core::fmt::Write;
 use snafu::Snafu;
 
 /// The length of a message's content in octets, as the `Content-Length` field
@@ -62,7 +62,8 @@ impl ContentLength {
     /// The length as a field value: decimal digits without leading zeros.
     pub fn to_field_value(self) -> FieldValue {
         let mut digits = BytesMut::with_capacity(20);
-        put_decimal(&mut digits, self.0);
+        // Invariant: writing to a `BytesMut` grows it and never fails.
+        write!(digits, "{}", self.0).expect("a BytesMut takes any text");
         // Digits are visible ASCII.
         FieldValue::from_checked(digits.freeze())
     }

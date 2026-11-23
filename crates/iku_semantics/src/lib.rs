@@ -45,7 +45,6 @@
 extern crate alloc;
 
 mod chars;
-mod decimal;
 
 pub mod connection;
 pub mod content_length;

@@ -92,6 +92,9 @@ pub(crate) const fn is_token_start(byte: u8) -> bool {
 
 /// A byte that can follow the first one: `tchar` (RFC 9110 §5.6.2), `:` or
 /// `/`.
+///
+/// The `tchar` set repeats `is_tchar` in `iku_semantics/src/chars.rs`, which
+/// is private to that package; a change to one is checked against the other.
 const fn is_token_character(byte: u8) -> bool {
     byte.is_ascii_alphanumeric()
         || matches!(

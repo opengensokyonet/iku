@@ -38,6 +38,7 @@ mod display_string;
 mod inner_list;
 mod item;
 mod key;
+mod keyed_members;
 mod lines;
 mod list;
 mod number;

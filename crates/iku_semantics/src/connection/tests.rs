@@ -255,3 +255,45 @@ fn connection_option_error_says_what_is_not_a_token() {
         "byte 0x2f at 1 is not a tchar"
     );
 }
+
+#[test]
+fn remove_connection_specific_with_many_options_and_lines() {
+    // 3000 options in uppercase on one line, every seventh again in lowercase
+    // on another with a member that is not a token, and 12000 other lines,
+    // half of them named by an option.
+    let mut first = alloc::string::String::new();
+    for i in 0..3000 {
+        if i > 0 {
+            first.push_str(", ");
+        }
+        first.push_str(&alloc::format!("X-Opt-{i}"));
+    }
+    let mut second = alloc::string::String::from("a/b");
+    for i in (0..3000).step_by(7) {
+        second.push_str(&alloc::format!(", x-opt-{i}"));
+    }
+    let mut fields = FieldSection::new();
+    fields.append(
+        FieldName::CONNECTION,
+        FieldValue::new(Bytes::from(first)).unwrap(),
+    );
+    let field = |text: alloc::string::String| FieldName::new(Bytes::from(text)).unwrap();
+    for i in 0..6000 {
+        fields.append(field(alloc::format!("x-opt-{i}")), value("1"));
+        fields.append(field(alloc::format!("keep-{i}")), value("2"));
+    }
+    fields.append(
+        FieldName::CONNECTION,
+        FieldValue::new(Bytes::from(second)).unwrap(),
+    );
+    remove_connection_specific(&mut fields);
+
+    let mut expected = Vec::new();
+    for i in 0..6000 {
+        if i >= 3000 {
+            expected.push(alloc::format!("x-opt-{i}").into_bytes());
+        }
+        expected.push(alloc::format!("keep-{i}").into_bytes());
+    }
+    assert_eq!(names(&fields), expected);
+}

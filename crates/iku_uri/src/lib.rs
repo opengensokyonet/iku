@@ -23,7 +23,6 @@ extern crate alloc;
 
 mod authority;
 mod chars;
-mod decimal;
 mod path_and_query;
 mod scheme;
 

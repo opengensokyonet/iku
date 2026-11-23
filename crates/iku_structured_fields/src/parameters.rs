@@ -2,6 +2,7 @@
 
 use crate::bare_item::BareItem;
 use crate::key::Key;
+use crate::keyed_members::KeyedMembers;
 use crate::syntax::{Parser, SyntaxError};
 use alloc::vec::Vec;
 
@@ -54,7 +55,7 @@ impl Parameters {
     /// Parses the parameters (§4.2.3.2). A key that is already there gets the
     /// later value and keeps its place.
     pub(crate) fn parse(parser: &mut Parser) -> Result<Self, SyntaxError> {
-        let mut parameters = Self::new();
+        let mut parameters = KeyedMembers::new();
         while parser.peek() == Some(b';') {
             parser.advance();
             parser.skip_sp();
@@ -65,9 +66,9 @@ impl Parameters {
             } else {
                 BareItem::Boolean(true)
             };
-            parameters.insert(key, value);
+            parameters.push(key, value);
         }
-        Ok(parameters)
+        Ok(Self(parameters.into_members()))
     }
 
     /// Writes `;key` for a true boolean and `;key=value` otherwise (§4.1.1.2).
@@ -87,11 +88,7 @@ impl FromIterator<(Key, BareItem)> for Parameters {
     /// Collects the parameters; a later value of a key replaces the earlier
     /// one in its place.
     fn from_iter<I: IntoIterator<Item = (Key, BareItem)>>(iter: I) -> Self {
-        let mut parameters = Self::new();
-        for (key, value) in iter {
-            parameters.insert(key, value);
-        }
-        parameters
+        Self(iter.into_iter().collect::<KeyedMembers<_>>().into_members())
     }
 }
 

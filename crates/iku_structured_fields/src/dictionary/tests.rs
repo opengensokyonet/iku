@@ -323,3 +323,63 @@ fn entries_of_a_missing_field_are_none() {
     let name = name();
     assert_eq!(Dictionary::entries(&fields, &name).count(), 0);
 }
+
+#[test]
+fn many_members_with_repeated_keys_keep_the_rules() {
+    // 4000 keys, then every even key again with another value, and every
+    // fifth key as a true boolean, over two lines.
+    let mut first = String::new();
+    for i in 0..4000 {
+        if i > 0 {
+            first.push_str(", ");
+        }
+        first.push_str(&alloc::format!("k{i}={i}"));
+    }
+    let mut second = String::new();
+    for i in (0..4000).step_by(2) {
+        second.push_str(&alloc::format!("k{i}={}, ", i + 10_000));
+    }
+    for i in (0..4000).step_by(5) {
+        second.push_str(&alloc::format!("k{i}, "));
+    }
+    second.push('z');
+    let mut fields = FieldSection::new();
+    fields.append(name(), FieldValue::new(Bytes::from(first.clone())).unwrap());
+    fields.append(
+        name(),
+        FieldValue::new(Bytes::from(second.clone())).unwrap(),
+    );
+
+    let dictionary = Dictionary::from_fields(&fields, &name()).unwrap().unwrap();
+    assert_eq!(dictionary.len(), 4001);
+    for (i, (key, value)) in dictionary.iter().enumerate() {
+        if i == 4000 {
+            assert_eq!(key.as_str(), "z");
+            assert_eq!(*value, ListMember::Item(Item::new(BareItem::Boolean(true))));
+            continue;
+        }
+        assert_eq!(key.as_str(), alloc::format!("k{i}"));
+        let expected = if i % 5 == 0 {
+            ListMember::Item(Item::new(BareItem::Boolean(true)))
+        } else if i % 2 == 0 {
+            int_member(i64::try_from(i).unwrap() + 10_000)
+        } else {
+            int_member(i64::try_from(i).unwrap())
+        };
+        assert_eq!(*value, expected, "k{i}");
+    }
+
+    // The same as inserting every occurrence in order.
+    let mut inserted = Dictionary::new();
+    for entry in Dictionary::entries(&fields, &name()) {
+        let (key, value) = entry.unwrap();
+        inserted.insert(key, value);
+    }
+    assert_eq!(dictionary, inserted);
+
+    // The same lines combined into one.
+    let combined = alloc::format!("{first}, {second}");
+    let one_line =
+        Dictionary::from_field_value(&FieldValue::new(Bytes::from(combined)).unwrap()).unwrap();
+    assert_eq!(one_line, dictionary);
+}

@@ -1,6 +1,9 @@
 //! Character classes of RFC 9110, as predicates on bytes.
 
 /// `tchar` (RFC 9110 §5.6.2).
+///
+/// `is_token_character` in `iku_structured_fields/src/token.rs` repeats this
+/// set with `:` and `/` added; a change to one is checked against the other.
 pub(crate) const fn is_tchar(byte: u8) -> bool {
     matches!(
         byte,

@@ -13,6 +13,7 @@ use crate::field::list::members;
 use crate::field::{FieldName, FieldSection};
 use crate::token::{self, InvalidTokenCharacterError, Token};
 use alloc::vec::Vec;
+use bytes::Bytes;
 use snafu::{ResultExt, Snafu};
 
 /// The fields that are connection-specific whatever `Connection` lists:
@@ -68,13 +69,39 @@ pub fn options(
 /// Options are matched ignoring ASCII case. A member that is not a token
 /// cannot name a field, so it removes nothing. RFC 9110 §7.6.1 lets an
 /// intermediary add its own `Connection` afterwards.
+///
+/// The options come from the sender, and nothing here limits which fields
+/// they name: a client that lists an end-to-end field, such as
+/// `Authorization` or `X-Forwarded-For`, has an intermediary remove it.
+/// RFC 9110 §7.6.1 says that a sender MUST NOT list a field that is meant for
+/// every recipient on the chain; this function does not hold the sender to
+/// that. Whether some fields are kept whatever the options say is for the
+/// caller to decide.
+///
+/// The options are lowercased, sorted and deduplicated once, and each line is
+/// looked up among them, so the time grows as `n log n` with the number of
+/// options and lines rather than as their product.
 pub fn remove_connection_specific(fields: &mut FieldSection) {
-    let options: Vec<Token> = options(fields).filter_map(Result::ok).collect();
+    // Field names are held in lowercase, so a lowercased option matches a
+    // name ignoring ASCII case exactly when their bytes are equal.
+    let mut options: Vec<Bytes> = options(fields)
+        .filter_map(Result::ok)
+        .map(|option| {
+            let bytes = option.into_bytes();
+            if bytes.iter().any(u8::is_ascii_uppercase) {
+                Bytes::from(bytes.to_ascii_lowercase())
+            } else {
+                bytes
+            }
+        })
+        .collect();
+    options.sort_unstable();
+    options.dedup();
     fields.retain(|name, _| {
         !is_connection_specific(name)
-            && !options
-                .iter()
-                .any(|option| option.eq_ignore_ascii_case(name.as_bytes()))
+            && options
+                .binary_search_by(|option| option.as_ref().cmp(name.as_bytes()))
+                .is_err()
     });
 }
 

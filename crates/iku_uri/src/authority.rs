@@ -1,9 +1,8 @@
 //! Authorities (RFC 3986 §3.2) as HTTP uses them.
 
 use crate::chars::{is_pct_encoded_at, is_sub_delim, is_unreserved};
-use crate::decimal::put_decimal;
 use bytes::{BufMut, Bytes, BytesMut};
-use core::fmt;
+use core::fmt::{self, Write};
 use core::net::{Ipv4Addr, Ipv6Addr};
 use core::str::FromStr;
 use snafu::Snafu;
@@ -123,7 +122,9 @@ impl Authority {
                 let mut bytes = BytesMut::with_capacity(self.host.len() + 6);
                 bytes.put_slice(&self.host);
                 bytes.put_u8(b':');
-                put_decimal(&mut bytes, u64::from(port));
+                // Invariant: writing to a `BytesMut` grows it and never
+                // fails.
+                write!(bytes, "{port}").expect("a BytesMut takes any text");
                 bytes.freeze()
             }
         }

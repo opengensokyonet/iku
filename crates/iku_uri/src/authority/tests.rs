@@ -344,7 +344,7 @@ fn authority_checks_the_host_before_the_port() {
 
 #[test]
 fn authority_to_bytes_writes_the_port_in_decimal() {
-    // `put_decimal`: zero, one digit, u16::MAX.
+    // Zero, one digit, u16::MAX.
     assert_eq!(ok("h:0").to_bytes(), Bytes::from_static(b"h:0"));
     assert_eq!(ok("h:7").to_bytes(), Bytes::from_static(b"h:7"));
     assert_eq!(ok("h:10").to_bytes(), Bytes::from_static(b"h:10"));

@@ -1,6 +1,6 @@
 # iku
 
-The parts of HTTP that every HTTP version shares, for Open Gensokyo Network, administratively supported by Starspun Works: the semantics of RFC 9110, structured fields (RFC 9651) and the Capsule Protocol (RFC 9297), each in a package of its own. The HTTP/3, HTTP/2 and HTTP/1.1 implementations of Open Gensokyo Network build on it.
+The parts of HTTP that every HTTP version shares, for Open Gensokyo Network, administratively supported by Starspun Works: the semantics of RFC 9110, the parts of a URI that HTTP uses (RFC 3986), structured fields (RFC 9651) and the Capsule Protocol (RFC 9297), each in a package of its own. The HTTP/3, HTTP/2 and HTTP/1.1 implementations of Open Gensokyo Network build on it.
 
 The repository is at an early stage. The APIs are experimental and are not stable production APIs.
 
