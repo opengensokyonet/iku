@@ -7,9 +7,13 @@
 //! `nitori_io` byte stream, so each HTTP version lends its own stream:
 //!
 //! - [`read_capsule_header`] reads a [`CapsuleHeader`] ([`CapsuleType`] and
-//!   length), or ends at the end of the stream;
-//! - [`read_capsule_value`] yields the value in chunks, and
-//!   [`collect_capsule_value`] reads a short one whole;
+//!   length, with the widths of their encodings), or ends at the end of the
+//!   stream;
+//! - the value is the stream itself, composed with
+//!   [`CapsuleHeader::value_limit`] so that it ends where the value does: a
+//!   reader of the value, such as the parser of a capsule type, reads it at
+//!   its own pace, and the stream waits for it;
+//! - [`skip_capsule_value`] drops a value, or what is left of one;
 //! - [`write_capsule_header`] writes a header; the caller writes the value.
 //!
 //! A capsule of an unknown type is read like any other; an endpoint drops it
@@ -24,7 +28,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-#![feature(impl_trait_in_assoc_type, yield_expr)]
+#![feature(impl_trait_in_assoc_type)]
 
 extern crate alloc;
 
@@ -44,10 +48,9 @@ pub use fields::{
     uses_capsule_protocol,
 };
 pub use read::{
-    CollectCapsuleValue, CollectCapsuleValueError, CollectCapsuleValueExt,
-    CollectCapsuleValueHostExt, ReadCapsuleHeader, ReadCapsuleHeaderError, ReadCapsuleHeaderExt,
-    ReadCapsuleHeaderHostExt, ReadCapsuleValue, ReadCapsuleValueError, ReadCapsuleValueExt,
-    ReadCapsuleValueHostExt, collect_capsule_value, read_capsule_header, read_capsule_value,
+    ReadCapsuleHeader, ReadCapsuleHeaderError, ReadCapsuleHeaderExt, ReadCapsuleHeaderHostExt,
+    SkipCapsuleValue, SkipCapsuleValueError, SkipCapsuleValueExt, SkipCapsuleValueHostExt,
+    read_capsule_header, skip_capsule_value,
 };
 pub use write::{
     WriteCapsuleHeader, WriteCapsuleHeaderError, WriteCapsuleHeaderExt, WriteCapsuleHeaderHostExt,

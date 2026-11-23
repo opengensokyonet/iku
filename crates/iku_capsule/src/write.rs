@@ -4,11 +4,12 @@ use crate::capsule_type::CapsuleHeader;
 use bytes::BufMut;
 use nitori_call::{ReceiverAccess, call};
 use nitori_io::{calls::WriteAllError, prelude::*};
-use sakuya_var_int::{VarInt, codec::write_var_int};
+use sakuya_var_int::{VarInt, codec::write_var_int_field};
 use snafu::{ResultExt, Snafu};
 
-/// Writes the header of a capsule: its type and length, each in the shortest
-/// encoding. The value follows, written by the caller.
+/// Writes the header of a capsule: its type and length, each in the width
+/// that the header holds, so a header that was read is written back as it
+/// was. The value follows, written by the caller.
 #[call(sync)]
 pub async fn write_capsule_header<F: Write, A: ReceiverAccess<Family = F>>(
     io: &mut A,
@@ -16,8 +17,8 @@ pub async fn write_capsule_header<F: Write, A: ReceiverAccess<Family = F>>(
 ) -> Result<(), WriteCapsuleHeaderError<F::Error>> {
     let mut bytes = [0u8; 2 * VarInt::MAX_ENCODED_LEN];
     let mut rest = &mut bytes[..];
-    write_var_int(&mut rest, header.capsule_type().get());
-    write_var_int(&mut rest, header.length());
+    write_var_int_field(&mut rest, header.capsule_type_field());
+    write_var_int_field(&mut rest, header.length_field());
     let unused = rest.remaining_mut();
     let encoded_len = bytes.len() - unused;
     io.write_all(&bytes[..encoded_len])

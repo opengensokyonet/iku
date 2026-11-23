@@ -14,3 +14,6 @@ snafu.workspace = true
 nitori_call.workspace = true
 nitori_io.workspace = true
 sakuya_var_int.workspace = true
+
+[dev-dependencies]
+nitori_io = { workspace = true, features = ["std"] }

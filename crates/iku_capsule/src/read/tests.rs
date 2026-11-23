@@ -1,12 +1,9 @@
 use super::*;
-use alloc::{string::ToString, vec, vec::Vec};
-use bytes::Buf;
+use crate::WriteCapsuleHeaderHostExt as _;
+use alloc::{string::ToString, vec::Vec};
+use bytes::Bytes;
 use nitori_io::error::IncompleteError;
-use sakuya_var_int::VarInt;
-
-fn nz(n: usize) -> NonZeroUsize {
-    NonZeroUsize::new(n).unwrap()
-}
+use sakuya_var_int::{VarInt, VarIntWidth};
 
 fn header(capsule_type: u64, length: u64) -> CapsuleHeader {
     CapsuleHeader::new(
@@ -15,51 +12,60 @@ fn header(capsule_type: u64, length: u64) -> CapsuleHeader {
     )
 }
 
-/// Collects the chunks that `read_capsule_value` yields, each as bytes.
-#[call(sync)]
-async fn value_chunks<F: ReadChunk, A: ReceiverAccess<Family = F>>(
-    io: &mut A,
-    header: CapsuleHeader,
-    chunk_maximum: NonZeroUsize,
-) -> Result<Vec<Vec<u8>>, ReadCapsuleValueError<F::Error>> {
-    let mut all = Vec::new();
-    let mut chunks = pin!(io.read_capsule_value(header, chunk_maximum));
-    loop {
-        match chunks.as_mut().step().await {
-            ControlFlow::Continue(chunk) => all.push(chunk.chunk().to_vec()),
-            ControlFlow::Break(result) => return result.map(|()| all),
-        }
-    }
+fn widths(header: CapsuleHeader) -> (VarIntWidth, VarIntWidth) {
+    (
+        header.capsule_type_field().width(),
+        header.length_field().width(),
+    )
 }
 
-#[test]
-fn smoke() {
-    let bytes: &[u8] = &[0x00, 0x03, b'a', b'b', b'c', 0x40, 0x25, 0x02, b'x', b'y'];
-    let mut input = bytes;
-    let header = input.sync_read_capsule_header_unpin().unwrap().unwrap();
-    assert_eq!(header.capsule_type(), CapsuleType::DATAGRAM);
-    assert_eq!(header.length().get(), 3);
-    let value = input
-        .sync_collect_capsule_value_unpin(header, 16, NonZeroUsize::new(2).unwrap())
-        .unwrap();
-    assert_eq!(value.as_deref(), Some(&b"abc"[..]));
-    let header = input.sync_read_capsule_header_unpin().unwrap().unwrap();
-    assert_eq!(header.capsule_type().get().get(), 0x25);
-    let value = input
-        .sync_collect_capsule_value_unpin(header, 1, NonZeroUsize::new(1).unwrap())
-        .unwrap();
-    assert_eq!(value, None);
-    assert!(input.sync_read_capsule_header_unpin().unwrap().is_none());
-    let mut truncated: &[u8] = &[0x00, 0x05, b'a'];
-    let header = truncated.sync_read_capsule_header_unpin().unwrap().unwrap();
-    assert!(
-        truncated
-            .sync_collect_capsule_value_unpin(header, 16, NonZeroUsize::new(2).unwrap())
-            .is_err()
-    );
-    let mut half: &[u8] = &[0x40];
-    assert!(half.sync_read_capsule_header_unpin().is_err());
+/// Reads a header, reads the first two bytes of its value through
+/// `value_limit`, drops the rest with `skip_capsule_value`, then reads the
+/// next header.
+#[call(sync)]
+async fn read_part_then_skip<F: ReadChunk, A: ReceiverAccess<Family = F>>(
+    io: &mut A,
+) -> Result<([u8; 2], u64, Option<CapsuleHeader>), &'static str> {
+    let header = io
+        .read_capsule_header()
+        .await
+        .map_err(|_| "first header")?
+        .ok_or("no first header")?;
+    let mut value = io.compose(header.value_limit());
+    let part = value.read_array::<2>().await.map_err(|_| "part")?;
+    let rest = value.into_state().0;
+    io.skip_capsule_value(rest).await.map_err(|_| "skip")?;
+    let next = io.read_capsule_header().await.map_err(|_| "next header")?;
+    Ok((part, rest, next))
 }
+
+macro_rules! read_past_value {
+    ($name:ident, $count:literal) => {
+        /// Reads a header, then reads `$count` bytes through `value_limit`: the
+        /// number of bytes read before the stream of the value ends, when it
+        /// does.
+        #[call(sync)]
+        async fn $name<F: ReadChunk, A: ReceiverAccess<Family = F>>(
+            io: &mut A,
+        ) -> Result<Option<usize>, &'static str> {
+            let header = io
+                .read_capsule_header()
+                .await
+                .map_err(|_| "header")?
+                .ok_or("no header")?;
+            let mut value = io.compose(header.value_limit());
+            match value.read_array::<$count>().await {
+                Ok(_) => Ok(None),
+                Err(nitori_io::calls::ReadArrayError::Incomplete { source }) => {
+                    Ok(Some(source.completed()))
+                }
+                Err(_) => Err("receiver failed"),
+            }
+        }
+    };
+}
+read_past_value!(read_three_of_value, 3);
+read_past_value!(read_one_of_value, 1);
 
 // read_capsule_header
 
@@ -77,7 +83,16 @@ fn header_reads_consecutive_capsules() {
         let n = h.length().get() as usize;
         input = &input[n..];
     }
-    assert_eq!(headers, [header(0, 2), header(0x25, 1), header(0x4000, 0)]);
+    // The second type is read in two bytes and keeps them.
+    let wide = CapsuleHeader::with_encoding(
+        VarIntField::new(
+            CapsuleType::new(VarInt::new(0x25).unwrap()),
+            VarIntWidth::Two,
+        )
+        .unwrap(),
+        VarIntField::shortest(VarInt::new(1).unwrap()),
+    );
+    assert_eq!(headers, [header(0, 2), wide, header(0x4000, 0)]);
 }
 
 #[test]
@@ -117,10 +132,48 @@ fn header_all_widths() {
 #[test]
 fn header_non_minimal_encodings_accepted() {
     let mut input: &[u8] = &[0x40, 0x00, 0x40, 0x03];
-    assert_eq!(
-        input.sync_read_capsule_header_unpin().unwrap(),
-        Some(header(0, 3))
-    );
+    let read = input.sync_read_capsule_header_unpin().unwrap().unwrap();
+    assert_eq!(read.capsule_type(), CapsuleType::DATAGRAM);
+    assert_eq!(read.length(), VarInt::new(3).unwrap());
+    assert_eq!(widths(read), (VarIntWidth::Two, VarIntWidth::Two));
+    assert_ne!(read, header(0, 3));
+}
+
+#[test]
+fn header_keeps_the_width_of_each_field() {
+    use VarIntWidth::{Eight, Four, One, Two};
+    let cases: [(&[u8], (VarIntWidth, VarIntWidth)); 5] = [
+        (&[0x00, 0x03], (One, One)),
+        (&[0x40, 0x00, 0x03], (Two, One)),
+        (&[0x00, 0x80, 0, 0, 0x03], (One, Four)),
+        (&[0xc0, 0, 0, 0, 0, 0, 0, 0, 0x40, 0x03], (Eight, Two)),
+        (&[0x80, 0, 0, 0, 0x80, 0, 0, 0x03], (Four, Four)),
+    ];
+    for (bytes, expected) in cases {
+        let mut input = bytes;
+        let read = input.sync_read_capsule_header_unpin().unwrap().unwrap();
+        assert_eq!(widths(read), expected, "{bytes:02x?}");
+        assert!(input.is_empty());
+    }
+}
+
+#[test]
+fn non_shortest_header_is_written_back_unchanged() {
+    // An intermediary forwards a capsule unmodified (RFC 9297 §3.2).
+    let inputs: [&[u8]; 4] = [
+        &[0x40, 0x00, 0x40, 0x03],
+        &[0x80, 0, 0, 0x25, 0xc0, 0, 0, 0, 0, 0, 0, 0x02],
+        &[0x00, 0x80, 0, 0, 0x00],
+        &[0xc0, 0, 0, 0, 0, 0, 0x3f, 0xff, 0x7f, 0xff],
+    ];
+    for bytes in inputs {
+        let mut input = bytes;
+        let read = input.sync_read_capsule_header_unpin().unwrap().unwrap();
+        assert!(input.is_empty());
+        let mut out = Vec::new();
+        out.sync_write_capsule_header_unpin(read).unwrap();
+        assert_eq!(out, bytes);
+    }
 }
 
 #[test]
@@ -129,8 +182,7 @@ fn header_unknown_type_is_read() {
     let h = input.sync_read_capsule_header_unpin().unwrap().unwrap();
     assert_eq!(h.capsule_type().get().get(), 0x3f);
     assert_eq!(h.length().get(), 2);
-    let chunks = input.sync_value_chunks_unpin(h, nz(8)).unwrap();
-    assert_eq!(chunks, [vec![0xaa, 0xbb]]);
+    assert_eq!(input, [0xaa, 0xbb]);
 }
 
 #[test]
@@ -201,224 +253,195 @@ fn header_leaves_value_unread() {
     assert_eq!(input, b"abc");
 }
 
-// read_capsule_value
+// value_limit
 
 #[test]
-fn value_zero_length_yields_nothing() {
-    let mut input: &[u8] = &[0xaa];
-    let chunks = input.sync_value_chunks_unpin(header(0, 0), nz(4)).unwrap();
-    assert!(chunks.is_empty());
-    assert_eq!(input, &[0xaa]);
+fn value_limit_is_the_length() {
+    assert_eq!(header(0, 0).value_limit().0, 0);
+    assert_eq!(header(0, 1234).value_limit().0, 1234);
+    assert_eq!(header(0, (1 << 62) - 1).value_limit().0, (1 << 62) - 1);
 }
 
 #[test]
-fn value_is_chunked_by_maximum() {
-    let mut input: &[u8] = b"abcdefg";
-    let chunks = input.sync_value_chunks_unpin(header(0, 7), nz(3)).unwrap();
-    assert_eq!(chunks, [b"abc".to_vec(), b"def".to_vec(), b"g".to_vec()]);
+fn value_limit_read_part_then_skip_stays_inside_the_capsule() {
+    let mut input: &[u8] = &[
+        0x00, 0x05, b'a', b'b', b'c', b'd', b'e', // DATAGRAM, 5
+        0x01, 0x00, // type 1, empty
+    ];
+    let (part, rest, next) = input.sync_read_part_then_skip_unpin().unwrap();
+    assert_eq!(&part, b"ab");
+    assert_eq!(rest, 3);
+    assert_eq!(next, Some(header(1, 0)));
     assert!(input.is_empty());
 }
 
 #[test]
-fn value_exact_multiple_of_maximum() {
+fn value_limit_read_whole_value_leaves_nothing_to_skip() {
+    let mut input: &[u8] = &[0x00, 0x02, b'x', b'y', 0x00, 0x00];
+    let (part, rest, next) = input.sync_read_part_then_skip_unpin().unwrap();
+    assert_eq!(&part, b"xy");
+    assert_eq!(rest, 0);
+    assert_eq!(next, Some(header(0, 0)));
+}
+
+#[test]
+fn value_limit_read_part_then_skip_ends_at_the_end_of_the_stream() {
+    let mut input: &[u8] = &[0x00, 0x03, 1, 2, 3];
+    let (_, rest, next) = input.sync_read_part_then_skip_unpin().unwrap();
+    assert_eq!(rest, 1);
+    assert_eq!(next, None);
+}
+
+#[test]
+fn value_limit_read_part_then_skip_on_a_bytes_host() {
+    let mut input = Bytes::from_static(&[0x00, 0x04, 1, 2, 3, 4, 0x07, 0x00, 9]);
+    let (part, rest, next) = input.sync_read_part_then_skip_unpin().unwrap();
+    assert_eq!(part, [1, 2]);
+    assert_eq!(rest, 2);
+    assert_eq!(next, Some(header(7, 0)));
+    assert_eq!(&input[..], [9]);
+}
+
+#[test]
+fn value_limit_ends_the_value_stream_at_its_length() {
+    // A parser of the value cannot read into the next capsule.
+    let mut input: &[u8] = &[0x00, 0x02, 1, 2, 0x00, 0x01, 9];
+    let completed = input.sync_read_three_of_value_unpin().unwrap();
+    assert_eq!(completed, Some(2));
+    // The bytes of the next capsule are not consumed.
+    assert_eq!(input, [0x00, 0x01, 9]);
+}
+
+#[test]
+fn value_limit_read_exactly_the_length_succeeds() {
+    let mut input: &[u8] = &[0x00, 0x03, 1, 2, 3, 0x00];
+    assert_eq!(input.sync_read_three_of_value_unpin().unwrap(), None);
+    assert_eq!(input, [0x00]);
+}
+
+#[test]
+fn value_limit_of_an_empty_value_ends_at_once() {
+    let mut input: &[u8] = &[0x00, 0x00, 0x00, 0x01, 9];
+    let completed = input.sync_read_one_of_value_unpin().unwrap();
+    assert_eq!(completed, Some(0));
+    assert_eq!(input, [0x00, 0x01, 9]);
+}
+
+// skip_capsule_value
+
+#[test]
+fn skip_zero_length_reads_nothing() {
+    let mut input: &[u8] = &[0xaa];
+    input.sync_skip_capsule_value_unpin(0).unwrap();
+    assert_eq!(input, [0xaa]);
+    let mut empty: &[u8] = &[];
+    empty.sync_skip_capsule_value_unpin(0).unwrap();
+}
+
+#[test]
+fn skip_exactly_the_whole_input() {
     let mut input: &[u8] = b"abcdef";
-    let chunks = input.sync_value_chunks_unpin(header(0, 6), nz(3)).unwrap();
-    assert_eq!(chunks, [b"abc".to_vec(), b"def".to_vec()]);
+    input.sync_skip_capsule_value_unpin(6).unwrap();
+    assert!(input.is_empty());
 }
 
 #[test]
-fn value_maximum_above_length_is_one_chunk() {
-    let mut input: &[u8] = b"abcd";
-    let chunks = input
-        .sync_value_chunks_unpin(header(0, 4), nz(1024))
-        .unwrap();
-    assert_eq!(chunks, [b"abcd".to_vec()]);
-}
-
-#[test]
-fn value_maximum_one() {
-    let mut input: &[u8] = b"xyz";
-    let chunks = input.sync_value_chunks_unpin(header(0, 3), nz(1)).unwrap();
-    assert_eq!(chunks, [b"x".to_vec(), b"y".to_vec(), b"z".to_vec()]);
-}
-
-#[test]
-fn value_does_not_read_the_next_capsule() {
+fn skip_does_not_read_the_next_capsule() {
     let mut input: &[u8] = &[b'a', b'b', b'c', 0x00, 0x01, b'z'];
-    let chunks = input.sync_value_chunks_unpin(header(0, 3), nz(2)).unwrap();
-    let joined: Vec<u8> = chunks.concat();
-    assert_eq!(joined, b"abc");
-    assert_eq!(input, &[0x00, 0x01, b'z']);
+    input.sync_skip_capsule_value_unpin(3).unwrap();
+    assert_eq!(input, [0x00, 0x01, b'z']);
+    assert_eq!(
+        input.sync_read_capsule_header_unpin().unwrap(),
+        Some(header(0, 1))
+    );
 }
 
 #[test]
-fn value_chunks_never_exceed_maximum() {
-    let data: Vec<u8> = (0..=99).collect();
-    for maximum in [1, 2, 7, 10, 99, 100, 101] {
-        let mut input = data.as_slice();
-        let chunks = input
-            .sync_value_chunks_unpin(header(0, 100), nz(maximum))
-            .unwrap();
-        assert!(chunks.iter().all(|c| !c.is_empty() && c.len() <= maximum));
-        assert_eq!(chunks.concat(), data);
-    }
-}
-
-#[test]
-fn value_from_bytes_host() {
+fn skip_from_bytes_host() {
     let mut input = Bytes::from_static(b"abcdefgh");
-    let chunks = input.sync_value_chunks_unpin(header(0, 5), nz(2)).unwrap();
-    assert_eq!(chunks.concat(), b"abcde");
+    input.sync_skip_capsule_value_unpin(5).unwrap();
     assert_eq!(&input[..], b"fgh");
 }
 
 #[test]
-fn value_truncated_is_value_error() {
+fn skip_truncated_is_incomplete() {
     let mut input: &[u8] = b"ab";
-    let error = input
-        .sync_value_chunks_unpin(header(0, 5), nz(4))
-        .unwrap_err();
-    let ReadCapsuleValueError::Value {
-        source: ReadChunksExactError::Incomplete { source },
-    } = &error
-    else {
-        panic!("not an incomplete value: {error:?}");
-    };
-    assert_eq!(source.completed(), 2);
-    assert_eq!(error.to_string(), "could not read the capsule value");
-}
-
-#[test]
-fn value_empty_stream_is_value_error() {
-    let mut input: &[u8] = &[];
-    let error = input
-        .sync_value_chunks_unpin(header(0, 1), nz(4))
-        .unwrap_err();
-    assert!(matches!(error, ReadCapsuleValueError::Value { .. }));
-}
-
-#[test]
-fn value_length_too_large_is_reported_on_small_targets_only() {
-    // On targets where usize is 64 bits every valid length fits, so
-    // LengthTooLarge cannot be produced here.
-    if usize::BITS < 64 {
-        let mut input: &[u8] = &[];
-        let h = header(0, 1 << 40);
-        let error = input.sync_value_chunks_unpin(h, nz(4)).unwrap_err();
-        assert!(matches!(
-            error,
-            ReadCapsuleValueError::LengthTooLarge { length } if length == 1 << 40
-        ));
-    }
-}
-
-// collect_capsule_value
-
-#[test]
-fn collect_returns_whole_value_within_maximum() {
-    let mut input: &[u8] = b"abcdef";
-    let value = input
-        .sync_collect_capsule_value_unpin(header(0, 4), 4, nz(2))
-        .unwrap();
-    assert_eq!(value.as_deref(), Some(&b"abcd"[..]));
-    assert_eq!(input, b"ef");
-}
-
-#[test]
-fn collect_zero_length_is_empty_bytes() {
-    let mut input: &[u8] = b"x";
-    let value = input
-        .sync_collect_capsule_value_unpin(header(0, 0), 0, nz(2))
-        .unwrap();
-    assert_eq!(value.as_deref(), Some(&b""[..]));
-    assert_eq!(input, b"x");
-}
-
-#[test]
-fn collect_below_maximum() {
-    let mut input: &[u8] = b"abc";
-    let value = input
-        .sync_collect_capsule_value_unpin(header(0, 3), 100, nz(1))
-        .unwrap();
-    assert_eq!(value.as_deref(), Some(&b"abc"[..]));
-}
-
-#[test]
-fn collect_above_maximum_discards_and_continues() {
-    let mut input: &[u8] = &[b'a', b'b', b'c', b'd', b'e', 0x00, 0x02, b'o', b'k'];
-    let h = header(0, 5);
-    let value = input.sync_collect_capsule_value_unpin(h, 4, nz(2)).unwrap();
-    assert_eq!(value, None);
-    let next = input.sync_read_capsule_header_unpin().unwrap().unwrap();
-    assert_eq!(next, header(0, 2));
-    let value = input
-        .sync_collect_capsule_value_unpin(next, 2, nz(2))
-        .unwrap();
-    assert_eq!(value.as_deref(), Some(&b"ok"[..]));
-    assert_eq!(input.sync_read_capsule_header_unpin().unwrap(), None);
-}
-
-#[test]
-fn collect_maximum_zero_discards_nonempty() {
-    let mut input: &[u8] = b"ab";
-    let value = input
-        .sync_collect_capsule_value_unpin(header(0, 2), 0, nz(1))
-        .unwrap();
-    assert_eq!(value, None);
+    let error = input.sync_skip_capsule_value_unpin(5).unwrap_err();
+    assert!(matches!(
+        error,
+        SkipCapsuleValueError::Incomplete {
+            length: 5,
+            completed: 2
+        }
+    ));
+    assert_eq!(
+        error.to_string(),
+        "the stream ended after 2 of 5 bytes of a capsule value"
+    );
     assert!(input.is_empty());
 }
 
 #[test]
-fn collect_truncated_whole_is_collect_error() {
-    let mut input: &[u8] = b"ab";
-    let error = input
-        .sync_collect_capsule_value_unpin(header(0, 5), 16, nz(2))
-        .unwrap_err();
-    let CollectCapsuleValueError::Collect {
-        source: ReadExactError::Incomplete { source },
-    } = &error
-    else {
-        panic!("not an incomplete collect: {error:?}");
-    };
-    assert_eq!(source.completed(), 2);
-    assert_eq!(error.to_string(), "could not read the capsule value");
+fn skip_empty_stream_is_incomplete_at_zero() {
+    let mut input: &[u8] = &[];
+    let error = input.sync_skip_capsule_value_unpin(1).unwrap_err();
+    assert!(matches!(
+        error,
+        SkipCapsuleValueError::Incomplete {
+            length: 1,
+            completed: 0
+        }
+    ));
 }
 
 #[test]
-fn collect_truncated_discard_is_discard_error() {
-    let mut input: &[u8] = b"ab";
-    let error = input
-        .sync_collect_capsule_value_unpin(header(0, 5), 3, nz(2))
-        .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            CollectCapsuleValueError::Discard {
-                source: ReadCapsuleValueError::Value { .. }
-            }
-        ),
-        "{error:?}"
-    );
-    assert_eq!(error.to_string(), "could not discard the capsule value");
+fn skip_length_beyond_u32_is_incomplete_with_the_count() {
+    for length in [u64::from(u32::MAX) + 1, 1 << 33, (1 << 62) - 1] {
+        let mut input: &[u8] = &[1, 2, 3, 4, 5];
+        let error = input.sync_skip_capsule_value_unpin(length).unwrap_err();
+        assert!(
+            matches!(
+                error,
+                SkipCapsuleValueError::Incomplete { length: l, completed: 5 } if l == length
+            ),
+            "{length}: {error:?}"
+        );
+    }
 }
 
 #[test]
-fn collect_unknown_type_is_read_like_any() {
-    let mut input: &[u8] = &[0x7f, 0xff, 0x02, 1, 2];
-    let h = input.sync_read_capsule_header_unpin().unwrap().unwrap();
-    assert_eq!(h.capsule_type().get().get(), 0x3fff);
-    let value = input.sync_collect_capsule_value_unpin(h, 8, nz(8)).unwrap();
-    assert_eq!(value.as_deref(), Some(&[1u8, 2][..]));
-}
-
-#[test]
-fn collect_from_bytes_host() {
-    let mut input = Bytes::from_static(b"abcxyz");
-    let value = input
-        .sync_collect_capsule_value_unpin(header(0, 3), 3, nz(2))
+fn oversized_datagram_is_skipped_and_reading_goes_on() {
+    // RFC 9297 §3.5: a DATAGRAM too long to handle is dropped.
+    let mut input: &[u8] = &[
+        0x00, 0x05, b'a', b'b', b'c', b'd', b'e', // too long
+        0x00, 0x02, b'o', b'k', // fine
+    ];
+    let first = input.sync_read_capsule_header_unpin().unwrap().unwrap();
+    assert_eq!(first.capsule_type(), CapsuleType::DATAGRAM);
+    input
+        .sync_skip_capsule_value_unpin(first.length().get())
         .unwrap();
-    assert_eq!(value, Some(Bytes::from_static(b"abc")));
-    assert_eq!(&input[..], b"xyz");
+    let next = input.sync_read_capsule_header_unpin().unwrap().unwrap();
+    assert_eq!(next, header(0, 2));
+    assert_eq!(input, b"ok");
+    input.sync_skip_capsule_value_unpin(2).unwrap();
+    assert_eq!(input.sync_read_capsule_header_unpin().unwrap(), None);
+}
+
+#[test]
+fn smoke() {
+    let mut input: &[u8] = &[0x00, 0x03, b'a', b'b', b'c', 0x40, 0x25, 0x02, b'x', b'y'];
+    let first = input.sync_read_capsule_header_unpin().unwrap().unwrap();
+    assert_eq!(first.length().get(), 3);
+    input
+        .sync_skip_capsule_value_unpin(first.length().get())
+        .unwrap();
+    let second = input.sync_read_capsule_header_unpin().unwrap().unwrap();
+    assert_eq!(second.capsule_type().get().get(), 0x25);
+    input
+        .sync_skip_capsule_value_unpin(second.length().get())
+        .unwrap();
+    assert!(input.sync_read_capsule_header_unpin().unwrap().is_none());
 }
 
 #[test]
@@ -447,4 +470,58 @@ fn header_truncated_length_counts_the_whole_encoding() {
         panic!("not an incomplete length: {error:?}");
     };
     assert_eq!((source.expected(), source.completed()), (4, 2));
+}
+
+/// Reading that fails once its bytes run out, one byte at a time.
+mod failing {
+    extern crate std;
+
+    use super::*;
+    use nitori_io::{adapters::Chunked, bridge::Std};
+    use std::io;
+
+    struct FailAfter<'a> {
+        bytes: &'a [u8],
+    }
+
+    impl io::Read for FailAfter<'_> {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            let Some((&first, rest)) = self.bytes.split_first() else {
+                return Err(io::Error::other("source failed"));
+            };
+            if buffer.is_empty() {
+                return Ok(0);
+            }
+            buffer[0] = first;
+            self.bytes = rest;
+            Ok(1)
+        }
+    }
+
+    #[test]
+    fn header_receiver_failure_is_reported_with_its_count() {
+        let mut input = Std::new(FailAfter {
+            bytes: &[0x00, 0x80, 0x01],
+        });
+        let error = input.sync_read_capsule_header_unpin().unwrap_err();
+        let ReadCapsuleHeaderError::Length { source } = &error else {
+            panic!("not a length error: {error:?}");
+        };
+        assert!(source.host_error().is_some());
+        assert_eq!(source.completed(), 2);
+    }
+
+    #[test]
+    fn skip_receiver_failure_is_reported_with_its_count() {
+        let chunk_capacity = NonZeroUsize::new(2).unwrap();
+        let mut input = Chunked::new(Std::new(FailAfter { bytes: b"abc" }), chunk_capacity);
+        let error = input.sync_skip_capsule_value_unpin(10).unwrap_err();
+        let SkipCapsuleValueError::Receiver {
+            length, completed, ..
+        } = error
+        else {
+            panic!("not a receiver error: {error:?}");
+        };
+        assert_eq!((length, completed), (10, 3));
+    }
 }

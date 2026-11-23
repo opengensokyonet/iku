@@ -1,20 +1,21 @@
 //! Reading capsules from a data stream (RFC 9297 §3.2, §3.3).
 
 use crate::capsule_type::{CapsuleHeader, CapsuleType};
-use bytes::{Bytes, BytesMut};
+use bytes::Buf;
 use core::num::NonZeroUsize;
-use core::ops::ControlFlow;
-use core::pin::pin;
 use nitori_call::{ReceiverAccess, call};
-use nitori_io::{
-    calls::{ReadChunksExactError, ReadExactError},
-    prelude::*,
-};
-use sakuya_var_int::call::{ReadVarIntError, ReadVarIntExt as _};
+use nitori_io::{adapters::ReadLimit, prelude::*};
+use sakuya_var_int::VarIntField;
+use sakuya_var_int::call::{ReadVarIntError, ReadVarIntFieldExt as _};
 use snafu::{ResultExt, Snafu};
 
 /// Reads the header of the next capsule: `None` when the stream ends before
 /// it, between two capsules.
+///
+/// The header keeps the widths of the encodings it was read from. The value
+/// follows: compose the stream with [`CapsuleHeader::value_limit`] to read it
+/// as a stream of its own, which ends where the value does, and
+/// [`skip_capsule_value`] to drop it or what is left of it.
 ///
 /// A stream that ends inside the header is a truncated capsule, which the
 /// recipient treats as a malformed or incomplete message (RFC 9297 §3.3);
@@ -23,17 +24,18 @@ use snafu::{ResultExt, Snafu};
 pub async fn read_capsule_header<F: Read, A: ReceiverAccess<Family = F>>(
     io: &mut A,
 ) -> Result<Option<CapsuleHeader>, ReadCapsuleHeaderError<F::Error>> {
-    let capsule_type = match io.read_var_int().await {
+    let capsule_type = match io.read_var_int_field().await {
         Ok(capsule_type) => capsule_type,
         // The stream ended before the first byte of the header.
         Err(error) if error.is_incomplete() && error.completed() == 0 => return Ok(None),
         Err(source) => return Err(ReadCapsuleHeaderError::Type { source }),
     };
-    let length = io.read_var_int().await.context(LengthSnafu)?;
-    Ok(Some(CapsuleHeader::new(
-        CapsuleType::new(capsule_type),
-        length,
-    )))
+    let length = io.read_var_int_field().await.context(LengthSnafu)?;
+    // invariant: the width was read with the value, so it holds it.
+    let capsule_type =
+        VarIntField::new(CapsuleType::from(capsule_type.get()), capsule_type.width())
+            .expect("a width that is read holds its value");
+    Ok(Some(CapsuleHeader::with_encoding(capsule_type, length)))
 }
 
 /// The header of a capsule could not be read (RFC 9297 §3.2).
@@ -56,104 +58,81 @@ pub enum ReadCapsuleHeaderError<E> {
     },
 }
 
-/// Reads the value of the capsule with `header`, yielding it in chunks of at
-/// most `chunk_maximum` bytes, without holding the whole value (RFC 9297 §3.2
-/// asks a recipient not to buffer a whole value before processing it).
-///
-/// A stream that ends inside the value is a truncated capsule (§3.3); the
-/// error then holds [`nitori_io::error::IncompleteError`].
-#[call(sync, yields = F::Chunk)]
-pub async fn read_capsule_value<F: ReadChunk, A: ReceiverAccess<Family = F>>(
-    io: &mut A,
-    header: CapsuleHeader,
-    chunk_maximum: NonZeroUsize,
-) -> Result<(), ReadCapsuleValueError<F::Error>> {
-    let length = header.length().get();
-    let Ok(length) = usize::try_from(length) else {
-        return LengthTooLargeSnafu { length }.fail();
-    };
-    let mut chunks = pin!(io.read_chunks_exact(length, chunk_maximum));
-    loop {
-        match chunks.as_mut().step().await {
-            ControlFlow::Continue(chunk) => yield chunk,
-            ControlFlow::Break(result) => return result.context(ValueSnafu),
-        }
+impl CapsuleHeader {
+    /// The read budget of the value: `io.compose(header.value_limit())` reads
+    /// the value and then ends, so that what reads it cannot read into the
+    /// next capsule.
+    ///
+    /// The budget left afterwards, from `into_state`, is what of the value
+    /// is still unread; [`skip_capsule_value`] drops it.
+    pub fn value_limit(self) -> ReadLimit<u64> {
+        ReadLimit(self.length().get())
     }
 }
 
-/// The value of a capsule could not be read (RFC 9297 §3.2).
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)))]
-pub enum ReadCapsuleValueError<E> {
-    /// The length does not fit in `usize` on this target.
-    #[snafu(display("capsule length {length} does not fit in memory sizes"))]
-    LengthTooLarge {
-        /// The length, above `usize::MAX`.
-        length: u64,
-    },
-    /// The value could not be read: the stream ended inside it, or reading
-    /// failed.
-    #[snafu(display("could not read the capsule value"))]
-    Value {
-        /// Why.
-        source: ReadChunksExactError<E>,
-    },
-}
-
-/// Reads the value of the capsule with `header` whole when it is at most
-/// `maximum` bytes; otherwise reads it in chunks of at most `chunk_maximum`
-/// bytes, drops it and returns `None`.
+/// Reads `length` bytes and drops them, without holding them: the value of a
+/// capsule that is dropped (RFC 9297 §3.2: a capsule of an unknown type; §3.5:
+/// a DATAGRAM that is too long), or what is left of a value after reading
+/// part of it.
 ///
-/// It is for short capsules, such as DATAGRAM, whose value is used whole; an
-/// endpoint discards a DATAGRAM capsule that is too long without buffering
-/// it (RFC 9297 §3.5).
+/// The length is a `u64`, so a value longer than memory sizes on a 32-bit
+/// target is dropped like any other.
+///
+/// # Errors
+///
+/// [`SkipCapsuleValueError::Incomplete`] if the stream ends first: a
+/// truncated capsule (§3.3). [`SkipCapsuleValueError::Receiver`] if reading
+/// fails. Both say how many bytes were dropped before.
 #[call(sync)]
-pub async fn collect_capsule_value<F: ReadChunk, A: ReceiverAccess<Family = F>>(
+pub async fn skip_capsule_value<F: ReadChunk, A: ReceiverAccess<Family = F>>(
     io: &mut A,
-    header: CapsuleHeader,
-    maximum: usize,
-    chunk_maximum: NonZeroUsize,
-) -> Result<Option<Bytes>, CollectCapsuleValueError<F::Error>> {
-    match usize::try_from(header.length().get()) {
-        Ok(length) if length <= maximum => {
-            let mut value = BytesMut::with_capacity(length);
-            io.read_exact(&mut value, length)
-                .await
-                .context(CollectSnafu)?;
-            Ok(Some(value.freeze()))
-        }
-        _ => {
-            let mut chunks = pin!(io.read_capsule_value(header, chunk_maximum));
-            loop {
-                match chunks.as_mut().step().await {
-                    ControlFlow::Continue(_) => {}
-                    ControlFlow::Break(result) => {
-                        result.context(DiscardSnafu)?;
-                        return Ok(None);
-                    }
-                }
+    length: u64,
+) -> Result<(), SkipCapsuleValueError<F::Error>> {
+    let mut completed = 0u64;
+    let mut value = io.compose(ReadLimit(length));
+    while completed < length {
+        match value.read_chunk(NonZeroUsize::MAX).await {
+            Ok(Some(chunk)) => {
+                // A chunk is at most `usize::MAX` bytes, and the budget keeps
+                // the total at most `length`.
+                completed += chunk.remaining() as u64;
+            }
+            Ok(None) => return IncompleteSnafu { length, completed }.fail(),
+            Err(source) => {
+                return Err(SkipCapsuleValueError::Receiver {
+                    source,
+                    length,
+                    completed,
+                });
             }
         }
     }
+    Ok(())
 }
 
-/// The value of a capsule could not be collected or discarded (RFC 9297
+/// The value of a capsule could not be read to the end to drop it (RFC 9297
 /// §3.2).
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
-pub enum CollectCapsuleValueError<E> {
-    /// The value, at most the maximum, could not be read whole: the stream
-    /// ended inside it, or reading failed.
-    #[snafu(display("could not read the capsule value"))]
-    Collect {
-        /// Why.
-        source: ReadExactError<E>,
+pub enum SkipCapsuleValueError<E> {
+    /// The stream ended after `completed` of the `length` bytes: the capsule
+    /// is truncated (§3.3).
+    #[snafu(display("the stream ended after {completed} of {length} bytes of a capsule value"))]
+    Incomplete {
+        /// The bytes to drop.
+        length: u64,
+        /// The bytes dropped before the end, fewer than `length`.
+        completed: u64,
     },
-    /// The value, above the maximum, could not be read to discard it.
-    #[snafu(display("could not discard the capsule value"))]
-    Discard {
-        /// Why.
-        source: ReadCapsuleValueError<E>,
+    /// Reading failed after `completed` of the `length` bytes.
+    #[snafu(display("reading failed after {completed} of {length} bytes of a capsule value"))]
+    Receiver {
+        /// The receiver's error.
+        source: E,
+        /// The bytes to drop.
+        length: u64,
+        /// The bytes dropped before the failure.
+        completed: u64,
     },
 }
 

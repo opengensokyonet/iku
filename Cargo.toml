@@ -19,6 +19,6 @@ iku_structured_fields = { path = "crates/iku_structured_fields" }
 iku_uri = { path = "crates/iku_uri" }
 bytes = { version = "1.12.1", default-features = false }
 snafu = { version = "0.9.2", git = "https://github.com/opengensokyonet/snafu", rev = "03cb8d2e52a3b0b33a39cc3d4ce8a7075fa4ab58", default-features = false, features = ["rust_1_81"] }
-nitori_call = { git = "https://github.com/opengensokyonet/nitori", rev = "cec268b840227a419020d37a0ec32538d8de9e86", default-features = false }
-sakuya_var_int = { git = "https://github.com/opengensokyonet/sakuya", rev = "740284c9f7d47051b29ae8e0cbc6db75462fb6b5" }
-nitori_io = { git = "https://github.com/opengensokyonet/nitori", rev = "cec268b840227a419020d37a0ec32538d8de9e86", default-features = false }
+nitori_call = { git = "https://github.com/opengensokyonet/nitori", rev = "081472d9b29894c92b5d3a648763ce66e17e1d77", default-features = false }
+sakuya_var_int = { git = "https://github.com/opengensokyonet/sakuya", rev = "0df1b6efbb60b7bf9ce9b425316beb7f35d20f9e" }
+nitori_io = { git = "https://github.com/opengensokyonet/nitori", rev = "081472d9b29894c92b5d3a648763ce66e17e1d77", default-features = false }

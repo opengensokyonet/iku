@@ -1,7 +1,7 @@
 use super::*;
 use crate::{CapsuleType, ReadCapsuleHeaderHostExt};
 use alloc::vec::Vec;
-use sakuya_var_int::VarInt;
+use sakuya_var_int::{VarInt, VarIntField, VarIntWidth};
 
 fn header(capsule_type: u64, length: u64) -> CapsuleHeader {
     CapsuleHeader::new(
@@ -131,4 +131,60 @@ fn error_display() {
         alloc::string::ToString::to_string(&error),
         "could not write the capsule header"
     );
+}
+
+fn wide(capsule_type: (u64, VarIntWidth), length: (u64, VarIntWidth)) -> CapsuleHeader {
+    CapsuleHeader::with_encoding(
+        VarIntField::new(
+            CapsuleType::new(VarInt::new(capsule_type.0).unwrap()),
+            capsule_type.1,
+        )
+        .unwrap(),
+        VarIntField::new(VarInt::new(length.0).unwrap(), length.1).unwrap(),
+    )
+}
+
+#[test]
+fn new_writes_the_shortest_encodings() {
+    assert_eq!(written(header(0x25, 3)), [0x25, 0x03]);
+    assert_eq!(written(header(0x40, 64)), [0x40, 0x40, 0x40, 0x40]);
+}
+
+#[test]
+fn with_encoding_writes_the_given_widths() {
+    use VarIntWidth::{Eight, Four, One, Two};
+    assert_eq!(written(wide((0, Two), (3, One))), [0x40, 0x00, 0x03]);
+    assert_eq!(written(wide((0, One), (3, Two))), [0x00, 0x40, 0x03]);
+    assert_eq!(
+        written(wide((0x25, Four), (3, Four))),
+        [0x80, 0, 0, 0x25, 0x80, 0, 0, 0x03]
+    );
+    let mut expected = alloc::vec![0xc0, 0, 0, 0, 0, 0, 0, 0x25];
+    expected.extend([0x40, 0x03]);
+    assert_eq!(written(wide((0x25, Eight), (3, Two))), expected);
+    assert_eq!(
+        written(wide((0x3f, Two), (0x3f, Eight))),
+        [0x40, 0x3f, 0xc0, 0, 0, 0, 0, 0, 0, 0x3f]
+    );
+}
+
+#[test]
+fn round_trip_keeps_non_shortest_encodings() {
+    use VarIntWidth::{Eight, Four, One, Two};
+    let headers = [
+        wide((0, Two), (3, Four)),
+        wide((0x25, Eight), (0, Eight)),
+        wide((1, One), (2, Two)),
+    ];
+    let mut out = Vec::new();
+    for header in headers {
+        out.sync_write_capsule_header_unpin(header).unwrap();
+    }
+    let mut input = out.as_slice();
+    for expected in headers {
+        let read = input.sync_read_capsule_header_unpin().unwrap().unwrap();
+        assert_eq!(read, expected);
+        assert_eq!(read.length_field().width(), expected.length_field().width());
+    }
+    assert!(input.is_empty());
 }
