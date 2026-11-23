@@ -40,11 +40,18 @@ impl ContentLength {
             return Ok(None);
         }
         let mut length = None;
-        for member in fields.list_members(&FieldName::CONTENT_LENGTH) {
-            let number = parse_decimal(member)?;
+        for (position, member) in fields.list_members(&FieldName::CONTENT_LENGTH).enumerate() {
+            let number = parse_decimal(member, position)?;
             match length {
                 None => length = Some(number),
-                Some(first) if first != number => return DifferentValuesSnafu.fail(),
+                Some(first) if first != number => {
+                    return DifferentValuesSnafu {
+                        member: position,
+                        first,
+                        second: number,
+                    }
+                    .fail();
+                }
                 Some(_) => {}
             }
         }
@@ -69,17 +76,22 @@ impl ContentLength {
     }
 }
 
-/// The number that `digits`, a non-empty member, is in decimal.
-fn parse_decimal(digits: &[u8]) -> Result<u64, ContentLengthError> {
+/// The number that `digits`, the non-empty member at `member`, is in decimal.
+fn parse_decimal(digits: &[u8], member: usize) -> Result<u64, ContentLengthError> {
     let mut number: u64 = 0;
-    for &digit in digits {
+    for (index, &digit) in digits.iter().enumerate() {
         if !digit.is_ascii_digit() {
-            return NotDecimalSnafu.fail();
+            return NotDecimalSnafu {
+                member,
+                index,
+                byte: digit,
+            }
+            .fail();
         }
         number = number
             .checked_mul(10)
             .and_then(|number| number.checked_add(u64::from(digit - b'0')))
-            .ok_or(ContentLengthError::OutOfRange)?;
+            .ok_or(ContentLengthError::OutOfRange { member })?;
     }
     Ok(number)
 }
@@ -92,15 +104,36 @@ pub enum ContentLengthError {
     #[snafu(display("content-length holds no number"))]
     Empty,
     /// A member holds a byte that is not a decimal digit.
-    #[snafu(display("content-length holds a member that is not a decimal number"))]
-    NotDecimal,
+    #[snafu(display(
+        "content-length member {member} holds byte {byte:#04x} at {index}, which is not a decimal digit"
+    ))]
+    NotDecimal {
+        /// Which member, counting the non-empty members of all lines from 0.
+        member: usize,
+        /// Where the byte is in the member.
+        index: usize,
+        /// The byte, not a digit.
+        byte: u8,
+    },
     /// A member is above `u64::MAX`; RFC 9110 §8.6 requires a recipient to
     /// guard against this overflow.
-    #[snafu(display("content-length is above the largest length this type holds"))]
-    OutOfRange,
+    #[snafu(display("content-length member {member} is above the largest length this type holds"))]
+    OutOfRange {
+        /// Which member, counting the non-empty members of all lines from 0.
+        member: usize,
+    },
     /// Two members are different numbers, so the length is unknown.
-    #[snafu(display("content-length holds different numbers"))]
-    DifferentValues,
+    #[snafu(display(
+        "content-length member {member} is {second}, but the first member is {first}"
+    ))]
+    DifferentValues {
+        /// Which member differs from the first, counting from 0.
+        member: usize,
+        /// The number of the first member.
+        first: u64,
+        /// The number of the member that differs.
+        second: u64,
+    },
 }
 
 #[cfg(test)]

@@ -1,9 +1,11 @@
 //! Absolute paths with an optional query (RFC 3986 §3.3, §3.4).
 
-use crate::chars::{is_pct_encoded_at, is_sub_delim, is_unreserved};
+use crate::chars::{
+    InvalidPercentEncodingError, check_pct_encoded_at, is_sub_delim, is_unreserved,
+};
 use bytes::Bytes;
 use core::fmt;
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 
 /// An absolute path and an optional query: `absolute-path [ "?" query ]`
 /// (RFC 9110 §4.1, RFC 3986 §3.3, §3.4).
@@ -46,9 +48,7 @@ impl PathAndQuery {
         while index < bytes.len() {
             let byte = bytes[index];
             if byte == b'%' {
-                if !is_pct_encoded_at(&bytes, index) {
-                    return InvalidPercentEncodingSnafu { index }.fail();
-                }
+                check_pct_encoded_at(&bytes, index).context(InvalidPercentEncodingSnafu)?;
                 index += 3;
                 continue;
             }
@@ -126,10 +126,10 @@ pub enum PathAndQueryError {
         source: InvalidPathCharacterError,
     },
     /// A `%` is not followed by two hexadecimal digits.
-    #[snafu(display("a percent sign at {index} is not followed by two hexadecimal digits"))]
+    #[snafu(display("a path or query holds a malformed percent-encoding"))]
     InvalidPercentEncoding {
-        /// Where the `%` is.
-        index: usize,
+        /// Which `%`, and where.
+        source: InvalidPercentEncodingError,
     },
 }
 

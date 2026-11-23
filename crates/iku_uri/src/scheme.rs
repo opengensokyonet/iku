@@ -74,6 +74,19 @@ impl Scheme {
     pub fn is_http_or_https(&self) -> bool {
         *self == Self::HTTP || *self == Self::HTTPS
     }
+
+    /// The port that an authority of this scheme means when it has none:
+    /// 80 for `http` and 443 for `https` (RFC 9110 §4.2.1, §4.2.2), and
+    /// `None` for a scheme that this package does not know one for.
+    pub fn default_port(&self) -> Option<u16> {
+        if *self == Self::HTTP {
+            Some(80)
+        } else if *self == Self::HTTPS {
+            Some(443)
+        } else {
+            None
+        }
+    }
 }
 
 impl fmt::Display for Scheme {

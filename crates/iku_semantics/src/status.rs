@@ -15,12 +15,12 @@ impl StatusCode {
     ///
     /// # Errors
     ///
-    /// [`StatusCodeError`] if it is not.
-    pub const fn new(code: u16) -> Result<Self, StatusCodeError> {
+    /// [`StatusCodeOutOfRangeError`] if it is not.
+    pub const fn new(code: u16) -> Result<Self, StatusCodeOutOfRangeError> {
         if 100 <= code && code <= 599 {
             Ok(Self(code))
         } else {
-            Err(StatusCodeError { code })
+            Err(StatusCodeOutOfRangeError { code })
         }
     }
 
@@ -29,7 +29,7 @@ impl StatusCode {
     /// carry it.
     ///
     /// A client that receives a code outside 100 to 599 should process the
-    /// response as a 5xx (§15); [`StatusCodeError::code`] gives the code for
+    /// response as a 5xx (§15); [`StatusCodeOutOfRangeError::code`] gives the code for
     /// that.
     ///
     /// # Errors
@@ -109,11 +109,11 @@ pub enum StatusClass {
 /// that range.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
 #[snafu(display("status code {code} is not from 100 to 599"))]
-pub struct StatusCodeError {
+pub struct StatusCodeOutOfRangeError {
     code: u16,
 }
 
-impl StatusCodeError {
+impl StatusCodeOutOfRangeError {
     /// The code, outside 100 to 599.
     pub const fn code(self) -> u16 {
         self.code
@@ -131,7 +131,7 @@ pub enum ParseStatusCodeError {
     #[snafu(display("the status code is out of range"))]
     OutOfRange {
         /// The code.
-        source: StatusCodeError,
+        source: StatusCodeOutOfRangeError,
     },
 }
 

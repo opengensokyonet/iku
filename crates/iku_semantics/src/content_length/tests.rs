@@ -71,19 +71,43 @@ fn content_length_compares_members_as_numbers() {
 
 #[test]
 fn content_length_rejects_different_numbers() {
-    assert_eq!(read(&["42, 43"]), Err(ContentLengthError::DifferentValues));
+    assert_eq!(
+        read(&["42, 43"]),
+        Err(ContentLengthError::DifferentValues {
+            member: 1,
+            first: 42,
+            second: 43
+        })
+    );
     assert_eq!(
         read(&["42", "43"]),
-        Err(ContentLengthError::DifferentValues)
+        Err(ContentLengthError::DifferentValues {
+            member: 1,
+            first: 42,
+            second: 43
+        })
     );
 }
 
 #[test]
 fn content_length_rejects_a_member_that_is_not_decimal() {
-    for value in ["4a", "-1", "+1", "\"42\"", "4 2", "0x2a", "4.2", "\u{e9}"] {
+    for (value, index, byte) in [
+        ("4a", 1, b'a'),
+        ("-1", 0, b'-'),
+        ("+1", 0, b'+'),
+        ("\"42\"", 0, b'"'),
+        ("4 2", 1, b' '),
+        ("0x2a", 1, b'x'),
+        ("4.2", 1, b'.'),
+        ("\u{e9}", 0, 0xc3),
+    ] {
         assert_eq!(
             read(&[value]),
-            Err(ContentLengthError::NotDecimal),
+            Err(ContentLengthError::NotDecimal {
+                member: 0,
+                index,
+                byte
+            }),
             "{value:?}"
         );
     }
@@ -91,8 +115,22 @@ fn content_length_rejects_a_member_that_is_not_decimal() {
 
 #[test]
 fn content_length_rejects_a_bad_member_after_a_good_one() {
-    assert_eq!(read(&["42, 4a"]), Err(ContentLengthError::NotDecimal));
-    assert_eq!(read(&["42", "-1"]), Err(ContentLengthError::NotDecimal));
+    assert_eq!(
+        read(&["42, 4a"]),
+        Err(ContentLengthError::NotDecimal {
+            member: 1,
+            index: 1,
+            byte: b'a'
+        })
+    );
+    assert_eq!(
+        read(&["42", "-1"]),
+        Err(ContentLengthError::NotDecimal {
+            member: 1,
+            index: 0,
+            byte: b'-'
+        })
+    );
 }
 
 #[test]
@@ -100,10 +138,21 @@ fn content_length_reports_the_first_broken_rule_in_order() {
     // 42 then 43 is seen before the non-decimal member.
     assert_eq!(
         read(&["42, 43, x"]),
-        Err(ContentLengthError::DifferentValues)
+        Err(ContentLengthError::DifferentValues {
+            member: 1,
+            first: 42,
+            second: 43
+        })
     );
     // x is seen before the mismatch.
-    assert_eq!(read(&["x, 42, 43"]), Err(ContentLengthError::NotDecimal));
+    assert_eq!(
+        read(&["x, 42, 43"]),
+        Err(ContentLengthError::NotDecimal {
+            member: 0,
+            index: 0,
+            byte: b'x'
+        })
+    );
 }
 
 #[test]
@@ -129,15 +178,15 @@ fn content_length_accepts_u64_max() {
 fn content_length_rejects_one_above_u64_max() {
     assert_eq!(
         read(&["18446744073709551616"]),
-        Err(ContentLengthError::OutOfRange)
+        Err(ContentLengthError::OutOfRange { member: 0 })
     );
     assert_eq!(
         read(&["184467440737095516150"]),
-        Err(ContentLengthError::OutOfRange)
+        Err(ContentLengthError::OutOfRange { member: 0 })
     );
     assert_eq!(
         read(&["99999999999999999999"]),
-        Err(ContentLengthError::OutOfRange)
+        Err(ContentLengthError::OutOfRange { member: 0 })
     );
 }
 
@@ -184,11 +233,31 @@ fn content_length_get_and_ordering() {
 fn content_length_errors_display() {
     let errors = [
         ContentLengthError::Empty,
-        ContentLengthError::NotDecimal,
-        ContentLengthError::OutOfRange,
-        ContentLengthError::DifferentValues,
+        ContentLengthError::NotDecimal {
+            member: 2,
+            index: 1,
+            byte: b'a',
+        },
+        ContentLengthError::OutOfRange { member: 3 },
+        ContentLengthError::DifferentValues {
+            member: 1,
+            first: 42,
+            second: 43,
+        },
     ];
     let texts: Vec<_> = errors.iter().map(|e| format!("{e}")).collect();
     assert_eq!(texts[0], "content-length holds no number");
+    assert_eq!(
+        texts[1],
+        "content-length member 2 holds byte 0x61 at 1, which is not a decimal digit"
+    );
+    assert_eq!(
+        texts[2],
+        "content-length member 3 is above the largest length this type holds"
+    );
+    assert_eq!(
+        texts[3],
+        "content-length member 1 is 43, but the first member is 42"
+    );
     assert_eq!(texts.len(), 4);
 }

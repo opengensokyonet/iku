@@ -28,7 +28,9 @@ mod scheme;
 
 pub use authority::{
     Authority, AuthorityError, Host, InvalidIpFutureError, InvalidPortCharacterError,
-    InvalidRegNameCharacterError,
+    InvalidRegNameCharacterError, PortOutOfRangeError, TextAfterIpLiteralError,
+    UserinfoNotAllowedError,
 };
+pub use chars::InvalidPercentEncodingError;
 pub use path_and_query::{InvalidPathCharacterError, PathAndQuery, PathAndQueryError};
 pub use scheme::{InvalidSchemeCharacterError, Scheme, SchemeError};

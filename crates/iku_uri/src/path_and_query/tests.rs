@@ -125,11 +125,10 @@ fn path_rejects_a_bad_percent_encoding() {
         ("/a?%", 3),
         ("/a?b%1", 4),
     ] {
-        assert_eq!(
-            new(text),
-            Err(PathAndQueryError::InvalidPercentEncoding { index }),
-            "{text:?}"
-        );
+        let Err(PathAndQueryError::InvalidPercentEncoding { source }) = new(text) else {
+            panic!("{text:?}: expected InvalidPercentEncoding");
+        };
+        assert_eq!(source.index(), index, "{text:?}");
     }
 }
 
@@ -159,8 +158,11 @@ fn path_errors_display() {
         format!("{}", PathAndQueryError::NotAbsolute),
         "a path does not start with a slash"
     );
+    let PathAndQueryError::InvalidPercentEncoding { source } = new("/%").unwrap_err() else {
+        panic!("expected InvalidPercentEncoding");
+    };
     assert_eq!(
-        format!("{}", new("/%").unwrap_err()),
+        format!("{source}"),
         "a percent sign at 1 is not followed by two hexadecimal digits"
     );
     let PathAndQueryError::InvalidCharacter { source } = new("/ ").unwrap_err() else {

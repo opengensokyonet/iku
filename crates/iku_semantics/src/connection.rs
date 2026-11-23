@@ -50,14 +50,19 @@ pub fn options(
     let lines = fields
         .iter()
         .filter(|(name, _)| **name == FieldName::CONNECTION);
-    lines.flat_map(|(_, value)| {
+    lines.enumerate().flat_map(|(line, (_, value))| {
         let bytes = value.clone().into_bytes();
         // A member is never empty, so only its characters need checking.
-        members(value.as_bytes()).map(move |member| {
-            token::check_characters(member)
-                .map(|()| Token::from_checked(bytes.slice_ref(member)))
-                .context(ConnectionOptionSnafu)
-        })
+        members(value.as_bytes())
+            .enumerate()
+            .map(move |(position, member)| {
+                token::check_characters(member)
+                    .map(|()| Token::from_checked(bytes.slice_ref(member)))
+                    .context(ConnectionOptionSnafu {
+                        line,
+                        member: position,
+                    })
+            })
     })
 }
 
@@ -111,12 +116,24 @@ pub fn remove_connection_specific(fields: &mut FieldSection) {
 /// A member is never empty, so the only way to fail is a byte that is not a
 /// `tchar`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
-#[snafu(display("a connection option is not a token"))]
+#[snafu(display("connection option {member} of line {line} is not a token"))]
 pub struct ConnectionOptionError {
     source: InvalidTokenCharacterError,
+    line: usize,
+    member: usize,
 }
 
 impl ConnectionOptionError {
+    /// Which `Connection` line, counting the `Connection` lines from 0.
+    pub const fn line(self) -> usize {
+        self.line
+    }
+
+    /// Which member of the line, counting its non-empty members from 0.
+    pub const fn member(self) -> usize {
+        self.member
+    }
+
     /// The byte that is not a `tchar`, and where it is in the member.
     pub const fn character_error(self) -> InvalidTokenCharacterError {
         self.source

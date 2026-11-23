@@ -1,6 +1,11 @@
 //! Authorities (RFC 3986 §3.2) as HTTP uses them.
 
-use crate::chars::{is_pct_encoded_at, is_sub_delim, is_unreserved};
+use crate::chars::{
+    InvalidPercentEncodingError, check_pct_encoded_at, is_pct_encoded_at, is_sub_delim,
+    is_unreserved,
+};
+use crate::scheme::Scheme;
+use alloc::vec::Vec;
 use bytes::{BufMut, Bytes, BytesMut};
 use core::fmt::{self, Write};
 use core::net::{Ipv4Addr, Ipv6Addr};
@@ -59,8 +64,10 @@ impl Authority {
     ///
     /// [`AuthorityError`] for the rule that `bytes` breaks.
     pub fn new(bytes: &[u8]) -> Result<Self, AuthorityError> {
-        if bytes.contains(&b'@') {
-            return UserinfoSnafu.fail();
+        if let Some(index) = bytes.iter().position(|&b| b == b'@') {
+            return Err(AuthorityError::Userinfo {
+                source: UserinfoNotAllowedError { index },
+            });
         }
         let (host, kind, port) = if bytes.first() == Some(&b'[') {
             let close = bytes
@@ -72,7 +79,11 @@ impl Authority {
             let port = match &bytes[close + 1..] {
                 [] => &[][..],
                 [b':', port @ ..] => port,
-                _ => return AfterIpLiteralSnafu.fail(),
+                _ => {
+                    return Err(AuthorityError::AfterIpLiteral {
+                        source: TextAfterIpLiteralError { index: close + 1 },
+                    });
+                }
             };
             (&bytes[..=close], kind, port_at(port, close + 2)?)
         } else {
@@ -106,6 +117,34 @@ impl Authority {
     /// IP literal with its brackets.
     pub fn host_bytes(&self) -> &[u8] {
         &self.host
+    }
+
+    /// Whether `self` and `other` are the same authority in a URI of
+    /// `scheme`, compared after the normalizations of RFC 3986 §6.2.2 and
+    /// §6.2.3, as comparing `Host` with `:authority` needs (RFC 9113 §8.3.1,
+    /// RFC 9114 §4.3.1).
+    ///
+    /// No port, and the default port of the scheme, are the same
+    /// ([`Scheme::default_port`]). In a registered name, a percent-encoded
+    /// unreserved character is the same as the character (§6.2.2.2); case
+    /// is already ignored, since hosts are held in lowercase. IP addresses
+    /// are compared as addresses.
+    ///
+    /// `==` compares the hosts and the port numbers as they are, without a
+    /// scheme.
+    pub fn eq_normalized(&self, other: &Self, scheme: &Scheme) -> bool {
+        let default_port = scheme.default_port();
+        if self.port.or(default_port) != other.port.or(default_port) {
+            return false;
+        }
+        match (self.kind, other.kind) {
+            (HostKind::Ipv4(a), HostKind::Ipv4(b)) => a == b,
+            (HostKind::Ipv6(a), HostKind::Ipv6(b)) => a == b,
+            (HostKind::RegName, HostKind::RegName) | (HostKind::IpFuture, HostKind::IpFuture) => {
+                decode_unreserved(&self.host) == decode_unreserved(&other.host)
+            }
+            _ => false,
+        }
     }
 
     /// The port, if the authority has a non-empty one.
@@ -172,9 +211,8 @@ fn reg_name_or_ipv4(host: &[u8]) -> Result<HostKind, AuthorityError> {
     while index < host.len() {
         let byte = host[index];
         if byte == b'%' {
-            if !is_pct_encoded_at(host, index) {
-                return Err(AuthorityError::InvalidPercentEncoding { index });
-            }
+            check_pct_encoded_at(host, index)
+                .map_err(|source| AuthorityError::InvalidPercentEncoding { source })?;
             index += 3;
         } else if is_unreserved(byte) || is_sub_delim(byte) {
             index += 1;
@@ -204,7 +242,9 @@ fn port_at(digits: &[u8], start: usize) -> Result<Option<u16>, AuthorityError> {
     for &digit in digits {
         port = port * 10 + u32::from(digit - b'0');
         if port > u32::from(u16::MAX) {
-            return PortOutOfRangeSnafu.fail();
+            return Err(AuthorityError::PortOutOfRange {
+                source: PortOutOfRangeError { index: start },
+            });
         }
     }
     // The loop stops above u16::MAX.
@@ -227,13 +267,48 @@ impl fmt::Debug for Authority {
     }
 }
 
+/// `host`, which is checked and in lowercase, with each percent-encoded
+/// unreserved character decoded (RFC 3986 §6.2.2.2) and in lowercase.
+fn decode_unreserved(host: &[u8]) -> Vec<u8> {
+    let mut decoded = Vec::with_capacity(host.len());
+    let mut index = 0;
+    while index < host.len() {
+        if host[index] == b'%' && is_pct_encoded_at(host, index) {
+            // invariant: `is_pct_encoded_at` checked two hexadecimal digits.
+            let byte = (hex_value(host[index + 1]) << 4) | hex_value(host[index + 2]);
+            if is_unreserved(byte) {
+                decoded.push(byte.to_ascii_lowercase());
+            } else {
+                decoded.extend_from_slice(&host[index..index + 3]);
+            }
+            index += 3;
+        } else {
+            decoded.push(host[index]);
+            index += 1;
+        }
+    }
+    decoded
+}
+
+/// The value of a hexadecimal digit.
+const fn hex_value(digit: u8) -> u8 {
+    match digit {
+        b'0'..=b'9' => digit - b'0',
+        b'a'..=b'f' => digit - b'a' + 10,
+        _ => digit - b'A' + 10,
+    }
+}
+
 /// The bytes are not an authority that HTTP accepts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
 #[snafu(visibility(pub(crate)))]
 pub enum AuthorityError {
     /// The authority holds userinfo (`@`), which RFC 9110 §4.2.4 deprecates.
     #[snafu(display("an authority holds userinfo"))]
-    Userinfo,
+    Userinfo {
+        /// Where the first `@` is.
+        source: UserinfoNotAllowedError,
+    },
     /// The host is empty (RFC 9110 §4.2.1).
     #[snafu(display("an authority has an empty host"))]
     EmptyHost,
@@ -251,7 +326,10 @@ pub enum AuthorityError {
     },
     /// Something other than `:` and a port follows an IP literal.
     #[snafu(display("an IP literal is followed by something other than a port"))]
-    AfterIpLiteral,
+    AfterIpLiteral {
+        /// Where the offending text starts.
+        source: TextAfterIpLiteralError,
+    },
     /// A byte that a registered name cannot hold.
     #[snafu(display("a registered name holds a byte it cannot"))]
     InvalidRegNameCharacter {
@@ -259,10 +337,10 @@ pub enum AuthorityError {
         source: InvalidRegNameCharacterError,
     },
     /// A `%` is not followed by two hexadecimal digits.
-    #[snafu(display("a percent sign at {index} is not followed by two hexadecimal digits"))]
+    #[snafu(display("a registered name holds a malformed percent-encoding"))]
     InvalidPercentEncoding {
         /// Where the `%` is in the authority.
-        index: usize,
+        source: InvalidPercentEncodingError,
     },
     /// A port holds something other than digits.
     #[snafu(display("a port holds a byte that is not a digit"))]
@@ -272,7 +350,62 @@ pub enum AuthorityError {
     },
     /// The port is above 65535.
     #[snafu(display("a port is above 65535"))]
-    PortOutOfRange,
+    PortOutOfRange {
+        /// Where the port starts.
+        source: PortOutOfRangeError,
+    },
+}
+
+/// An authority holds userinfo (`@`), which RFC 9110 §4.2.4 deprecates.
+///
+/// It is constructed only when the check fails.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
+#[snafu(display("userinfo at {index}: an authority holds an `@`"))]
+#[snafu(context(suffix(false)))]
+pub struct UserinfoNotAllowedError {
+    index: usize,
+}
+
+impl UserinfoNotAllowedError {
+    /// Where the first `@` is in the authority.
+    pub const fn index(self) -> usize {
+        self.index
+    }
+}
+
+/// Something other than `:` and a port follows the closing bracket of an IP
+/// literal.
+///
+/// It is constructed only when the check fails.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
+#[snafu(display("an IP literal is followed at {index} by something other than a port"))]
+#[snafu(context(suffix(false)))]
+pub struct TextAfterIpLiteralError {
+    index: usize,
+}
+
+impl TextAfterIpLiteralError {
+    /// Where the text after the closing bracket starts in the authority.
+    pub const fn index(self) -> usize {
+        self.index
+    }
+}
+
+/// A port is above 65535, the largest number that fits in two octets.
+///
+/// It is constructed only when the check fails.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
+#[snafu(display("the port at {index} is above 65535"))]
+#[snafu(context(suffix(false)))]
+pub struct PortOutOfRangeError {
+    index: usize,
+}
+
+impl PortOutOfRangeError {
+    /// Where the first digit of the port is in the authority.
+    pub const fn index(self) -> usize {
+        self.index
+    }
 }
 
 /// An `IPvFuture` literal breaks its grammar, `"v" 1*HEXDIG "." 1*(

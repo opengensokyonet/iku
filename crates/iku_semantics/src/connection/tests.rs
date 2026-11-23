@@ -118,8 +118,19 @@ fn options_reports_a_member_that_is_not_a_token() {
     let got = collect(&fields);
     assert_eq!(got.len(), 2);
     assert_eq!(got[0], Ok(token("ok")));
-    let error = got[1].clone().unwrap_err().character_error();
+    let option_error = got[1].clone().unwrap_err();
+    assert_eq!((option_error.line(), option_error.member()), (0, 1));
+    let error = option_error.character_error();
     assert_eq!((error.index(), error.byte()), (1, b'/'));
+}
+
+#[test]
+fn options_reports_the_line_of_a_bad_member() {
+    let fields = section(&[("connection", "a"), ("x", "y"), ("connection", "b, c, d/e")]);
+    let got = collect(&fields);
+    assert_eq!(got.len(), 4);
+    let error = got[3].clone().unwrap_err();
+    assert_eq!((error.line(), error.member()), (1, 2));
 }
 
 #[test]
@@ -248,7 +259,7 @@ fn connection_option_error_says_what_is_not_a_token() {
     let error = collect(&fields)[0].clone().unwrap_err();
     assert_eq!(
         alloc::format!("{error}"),
-        "a connection option is not a token"
+        "connection option 0 of line 0 is not a token"
     );
     assert_eq!(
         alloc::format!("{}", error.character_error()),

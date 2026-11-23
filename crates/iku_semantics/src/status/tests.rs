@@ -18,7 +18,7 @@ fn status_code_new_rejects_just_outside_the_range() {
 
 #[test]
 fn status_code_new_works_in_const_context() {
-    const OK: Result<StatusCode, StatusCodeError> = StatusCode::new(204);
+    const OK: Result<StatusCode, StatusCodeOutOfRangeError> = StatusCode::new(204);
     assert_eq!(OK.unwrap().get(), 204);
 }
 

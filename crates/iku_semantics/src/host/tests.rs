@@ -97,7 +97,7 @@ fn host_field_rejects_userinfo() {
     assert!(matches!(
         error,
         HostFieldError::InvalidAuthority {
-            source: AuthorityError::Userinfo
+            source: AuthorityError::Userinfo { .. }
         }
     ));
 }
@@ -107,7 +107,7 @@ fn host_field_rejects_a_bad_port() {
     assert!(matches!(
         read(&["example.com:65536"]),
         Err(HostFieldError::InvalidAuthority {
-            source: AuthorityError::PortOutOfRange
+            source: AuthorityError::PortOutOfRange { .. }
         })
     ));
 }

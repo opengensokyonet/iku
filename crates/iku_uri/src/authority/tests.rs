@@ -13,6 +13,24 @@ fn err(text: &str) -> AuthorityError {
     new(text).unwrap_err()
 }
 
+/// The index of the `%` that `AuthorityError::InvalidPercentEncoding` names.
+fn pct_index(text: &str) -> usize {
+    match err(text) {
+        AuthorityError::InvalidPercentEncoding { source } => source.index(),
+        other => panic!("{text:?}: expected InvalidPercentEncoding, got {other:?}"),
+    }
+}
+
+/// The index that a failure with an index payload names.
+fn payload_index(text: &str) -> usize {
+    match err(text) {
+        AuthorityError::Userinfo { source } => source.index(),
+        AuthorityError::AfterIpLiteral { source } => source.index(),
+        AuthorityError::PortOutOfRange { source } => source.index(),
+        other => panic!("{text:?}: expected an index payload, got {other:?}"),
+    }
+}
+
 #[test]
 fn authority_reads_a_registered_name() {
     // RFC 3986 §3.2.2.
@@ -157,11 +175,12 @@ fn authority_empty_port_is_no_port() {
 #[test]
 fn authority_rejects_userinfo() {
     // RFC 9110 §4.2.4.
-    assert_eq!(err("user@example.com"), AuthorityError::Userinfo);
-    assert_eq!(err("@"), AuthorityError::Userinfo);
-    assert_eq!(err("a:b@host"), AuthorityError::Userinfo);
-    assert_eq!(err("[::1]@h"), AuthorityError::Userinfo);
-    assert_eq!(err("h:80@"), AuthorityError::Userinfo);
+    assert_eq!(payload_index("user@example.com"), 4);
+    assert_eq!(payload_index("@"), 0);
+    assert_eq!(payload_index("a:b@host"), 3);
+    assert_eq!(payload_index("[::1]@h"), 5);
+    assert_eq!(payload_index("h:80@"), 4);
+    assert!(matches!(err("@"), AuthorityError::Userinfo { .. }));
 }
 
 #[test]
@@ -231,14 +250,18 @@ fn authority_rejects_something_other_than_a_port_after_an_ip_literal() {
         assert!(
             matches!(
                 error,
-                AuthorityError::AfterIpLiteral | AuthorityError::InvalidPortCharacter { .. }
+                AuthorityError::AfterIpLiteral { .. } | AuthorityError::InvalidPortCharacter { .. }
             ),
             "{text}: {error:?}"
         );
     }
-    assert_eq!(err("[::1]x"), AuthorityError::AfterIpLiteral);
-    assert_eq!(err("[::1]80"), AuthorityError::AfterIpLiteral);
-    assert_eq!(err("[::1]]"), AuthorityError::AfterIpLiteral);
+    assert_eq!(payload_index("[::1]x"), 5);
+    assert_eq!(payload_index("[::1]80"), 5);
+    assert_eq!(payload_index("[::1]]"), 5);
+    assert!(matches!(
+        err("[::1]x"),
+        AuthorityError::AfterIpLiteral { .. }
+    ));
 }
 
 #[test]
@@ -278,22 +301,10 @@ fn authority_reg_name_character_index_counts_from_the_authority_start() {
 
 #[test]
 fn authority_rejects_a_bad_percent_encoding_in_a_name() {
-    assert_eq!(
-        err("a%"),
-        AuthorityError::InvalidPercentEncoding { index: 1 }
-    );
-    assert_eq!(
-        err("a%2"),
-        AuthorityError::InvalidPercentEncoding { index: 1 }
-    );
-    assert_eq!(
-        err("%zz"),
-        AuthorityError::InvalidPercentEncoding { index: 0 }
-    );
-    assert_eq!(
-        err("ab%2g.c"),
-        AuthorityError::InvalidPercentEncoding { index: 2 }
-    );
+    assert_eq!(pct_index("a%"), 1);
+    assert_eq!(pct_index("a%2"), 1);
+    assert_eq!(pct_index("%zz"), 0);
+    assert_eq!(pct_index("ab%2g.c"), 2);
 }
 
 #[test]
@@ -319,14 +330,11 @@ fn authority_rejects_a_port_with_a_non_digit() {
 
 #[test]
 fn authority_rejects_a_port_above_65535() {
-    assert_eq!(err("h:65536"), AuthorityError::PortOutOfRange);
-    assert_eq!(err("h:99999"), AuthorityError::PortOutOfRange);
-    assert_eq!(err("h:4294967296"), AuthorityError::PortOutOfRange);
-    assert_eq!(
-        err("h:99999999999999999999999"),
-        AuthorityError::PortOutOfRange
-    );
-    assert_eq!(err("[::1]:65536"), AuthorityError::PortOutOfRange);
+    assert_eq!(payload_index("h:65536"), 2);
+    assert_eq!(payload_index("h:99999"), 2);
+    assert_eq!(payload_index("h:4294967296"), 2);
+    assert_eq!(payload_index("h:99999999999999999999999"), 2);
+    assert_eq!(payload_index("[::1]:65536"), 6);
 }
 
 #[test]
@@ -391,14 +399,25 @@ fn authority_display_and_debug() {
 
 #[test]
 fn authority_errors_display() {
+    assert_eq!(format!("{}", err("a@b")), "an authority holds userinfo");
+    let AuthorityError::Userinfo { source } = err("a@b") else {
+        panic!("expected Userinfo");
+    };
     assert_eq!(
-        format!("{}", AuthorityError::Userinfo),
-        "an authority holds userinfo"
+        format!("{source}"),
+        "userinfo at 1: an authority holds an `@`"
     );
+    let AuthorityError::InvalidPercentEncoding { source } = err("abc%") else {
+        panic!("expected InvalidPercentEncoding");
+    };
     assert_eq!(
-        format!("{}", AuthorityError::InvalidPercentEncoding { index: 3 }),
+        format!("{source}"),
         "a percent sign at 3 is not followed by two hexadecimal digits"
     );
+    let AuthorityError::PortOutOfRange { source } = err("h:70000") else {
+        panic!("expected PortOutOfRange");
+    };
+    assert_eq!(format!("{source}"), "the port at 2 is above 65535");
     let AuthorityError::InvalidPortCharacter { source } = err("h:x") else {
         panic!();
     };
@@ -420,4 +439,44 @@ fn authority_errors_display() {
         format!("{source}"),
         "the IPvFuture literal ending at 2 is not valid"
     );
+}
+
+#[test]
+fn eq_normalized_takes_the_default_port_of_the_scheme() {
+    // RFC 3986 §6.2.3; RFC 9113 §8.3.1.
+    assert!(ok("example.com").eq_normalized(&ok("example.com:443"), &Scheme::HTTPS));
+    assert!(ok("example.com:").eq_normalized(&ok("example.com:443"), &Scheme::HTTPS));
+    assert!(ok("example.com:80").eq_normalized(&ok("example.com"), &Scheme::HTTP));
+    assert!(!ok("example.com").eq_normalized(&ok("example.com:80"), &Scheme::HTTPS));
+    assert!(!ok("example.com:443").eq_normalized(&ok("example.com:8443"), &Scheme::HTTPS));
+    // No default port is known for other schemes.
+    let other = Scheme::from_static("coap").unwrap();
+    assert!(!ok("example.com").eq_normalized(&ok("example.com:5683"), &other));
+    assert!(ok("example.com:5683").eq_normalized(&ok("EXAMPLE.com:5683"), &other));
+}
+
+#[test]
+fn eq_normalized_decodes_unreserved_characters() {
+    // RFC 3986 §6.2.2.2: %61 is `a`, %2D is `-`; %2F is not unreserved.
+    assert!(ok("ex%61mple.com").eq_normalized(&ok("example.com"), &Scheme::HTTPS));
+    assert!(ok("a%2Db").eq_normalized(&ok("a-b"), &Scheme::HTTPS));
+    assert!(ok("%41").eq_normalized(&ok("a"), &Scheme::HTTPS));
+    assert!(ok("a%2fb").eq_normalized(&ok("a%2Fb"), &Scheme::HTTPS));
+    assert!(!ok("a%2fb").eq_normalized(&ok("axb"), &Scheme::HTTPS));
+    assert_ne!(ok("ex%61mple.com"), ok("example.com"));
+}
+
+#[test]
+fn eq_normalized_compares_ip_addresses() {
+    assert!(ok("[::1]").eq_normalized(&ok("[0:0::1]:443"), &Scheme::HTTPS));
+    assert!(ok("127.0.0.1").eq_normalized(&ok("127.0.0.1:80"), &Scheme::HTTP));
+    assert!(!ok("[::1]").eq_normalized(&ok("[::2]"), &Scheme::HTTPS));
+    assert!(!ok("127.0.0.1").eq_normalized(&ok("localhost"), &Scheme::HTTP));
+}
+
+#[test]
+fn scheme_default_ports() {
+    assert_eq!(Scheme::HTTP.default_port(), Some(80));
+    assert_eq!(Scheme::HTTPS.default_port(), Some(443));
+    assert_eq!(Scheme::from_static("ws").unwrap().default_port(), None);
 }
