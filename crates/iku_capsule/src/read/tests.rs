@@ -3,7 +3,7 @@ use crate::WriteCapsuleHeaderHostExt as _;
 use alloc::{string::ToString, vec::Vec};
 use bytes::Bytes;
 use nitori_io::error::IncompleteError;
-use sakuya_var_int::{VarInt, VarIntWidth};
+use sakuya_var_int::{VarInt, VarIntField, VarIntWidth};
 
 fn header(capsule_type: u64, length: u64) -> CapsuleHeader {
     CapsuleHeader::new(
@@ -84,7 +84,7 @@ fn header_reads_consecutive_capsules() {
         input = &input[n..];
     }
     // The second type is read in two bytes and keeps them.
-    let wide = CapsuleHeader::with_encoding(
+    let wide = CapsuleHeader::with_widths(
         VarIntField::new(
             CapsuleType::new(VarInt::new(0x25).unwrap()),
             VarIntWidth::Two,

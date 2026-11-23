@@ -399,7 +399,10 @@ fn authority_display_and_debug() {
 
 #[test]
 fn authority_errors_display() {
-    assert_eq!(format!("{}", err("a@b")), "an authority holds userinfo");
+    assert_eq!(
+        format!("{}", err("a@b")),
+        "userinfo at 1: an authority holds an `@`"
+    );
     let AuthorityError::Userinfo { source } = err("a@b") else {
         panic!("expected Userinfo");
     };
@@ -479,4 +482,13 @@ fn scheme_default_ports() {
     assert_eq!(Scheme::HTTP.default_port(), Some(80));
     assert_eq!(Scheme::HTTPS.default_port(), Some(443));
     assert_eq!(Scheme::from_static("ws").unwrap().default_port(), None);
+}
+
+#[test]
+fn eq_normalized_compares_ip_futures_and_keeps_kinds_apart() {
+    assert!(ok("[v1.A]").eq_normalized(&ok("[v1.a]:443"), &Scheme::HTTPS));
+    assert!(!ok("[v1.a]").eq_normalized(&ok("[v1.b]"), &Scheme::HTTPS));
+    // A registered name is not an IP address, even when it decodes to one.
+    assert!(!ok("127.0.0.%31").eq_normalized(&ok("127.0.0.1"), &Scheme::HTTP));
+    assert!(!ok("[::1]").eq_normalized(&ok("localhost"), &Scheme::HTTPS));
 }

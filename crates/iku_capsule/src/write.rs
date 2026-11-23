@@ -17,6 +17,8 @@ pub async fn write_capsule_header<F: Write, A: ReceiverAccess<Family = F>>(
 ) -> Result<(), WriteCapsuleHeaderError<F::Error>> {
     let mut bytes = [0u8; 2 * VarInt::MAX_ENCODED_LEN];
     let mut rest = &mut bytes[..];
+    // invariant: each encoding takes at most `VarInt::MAX_ENCODED_LEN`
+    // bytes, so both fit.
     write_var_int_field(&mut rest, header.capsule_type_field());
     write_var_int_field(&mut rest, header.length_field());
     let unused = rest.remaining_mut();

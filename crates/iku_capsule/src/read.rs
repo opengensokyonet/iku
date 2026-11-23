@@ -5,7 +5,6 @@ use bytes::Buf;
 use core::num::NonZeroUsize;
 use nitori_call::{ReceiverAccess, call};
 use nitori_io::{adapters::ReadLimit, prelude::*};
-use sakuya_var_int::VarIntField;
 use sakuya_var_int::call::{ReadVarIntError, ReadVarIntFieldExt as _};
 use snafu::{ResultExt, Snafu};
 
@@ -14,8 +13,8 @@ use snafu::{ResultExt, Snafu};
 ///
 /// The header keeps the widths of the encodings it was read from. The value
 /// follows: compose the stream with [`CapsuleHeader::value_limit`] to read it
-/// as a stream of its own, which ends where the value does, and
-/// [`skip_capsule_value`] to drop it or what is left of it.
+/// as a stream of its own, which ends where the value does, or drop it with
+/// [`skip_capsule_value`].
 ///
 /// A stream that ends inside the header is a truncated capsule, which the
 /// recipient treats as a malformed or incomplete message (RFC 9297 §3.3);
@@ -24,18 +23,14 @@ use snafu::{ResultExt, Snafu};
 pub async fn read_capsule_header<F: Read, A: ReceiverAccess<Family = F>>(
     io: &mut A,
 ) -> Result<Option<CapsuleHeader>, ReadCapsuleHeaderError<F::Error>> {
-    let capsule_type = match io.read_var_int_field().await {
+    let capsule_type = match io.read_var_int_field::<CapsuleType>().await {
         Ok(capsule_type) => capsule_type,
         // The stream ended before the first byte of the header.
         Err(error) if error.is_incomplete() && error.completed() == 0 => return Ok(None),
         Err(source) => return Err(ReadCapsuleHeaderError::Type { source }),
     };
     let length = io.read_var_int_field().await.context(LengthSnafu)?;
-    // invariant: the width was read with the value, so it holds it.
-    let capsule_type =
-        VarIntField::new(CapsuleType::from(capsule_type.get()), capsule_type.width())
-            .expect("a width that is read holds its value");
-    Ok(Some(CapsuleHeader::with_encoding(capsule_type, length)))
+    Ok(Some(CapsuleHeader::with_widths(capsule_type, length)))
 }
 
 /// The header of a capsule could not be read (RFC 9297 §3.2).
@@ -64,7 +59,11 @@ impl CapsuleHeader {
     /// next capsule.
     ///
     /// The budget left afterwards, from `into_state`, is what of the value
-    /// is still unread; [`skip_capsule_value`] drops it.
+    /// is still unread. A recipient that parses a capsule type it knows
+    /// treats bytes left after the fields that the type defines as a
+    /// malformed capsule (RFC 9297 §3.3); only a capsule that is dropped
+    /// whole, such as one of an unknown type, has its rest skipped with
+    /// [`skip_capsule_value`].
     pub fn value_limit(self) -> ReadLimit<u64> {
         ReadLimit(self.length().get())
     }
@@ -72,11 +71,14 @@ impl CapsuleHeader {
 
 /// Reads `length` bytes and drops them, without holding them: the value of a
 /// capsule that is dropped (RFC 9297 §3.2: a capsule of an unknown type; §3.5:
-/// a DATAGRAM that is too long), or what is left of a value after reading
-/// part of it.
+/// a DATAGRAM that is too long), or what is left of such a value after
+/// reading part of it. Bytes left after the fields of a capsule type that
+/// the recipient knows make the capsule malformed (§3.3) and are not for
+/// skipping.
 ///
 /// The length is a `u64`, so a value longer than memory sizes on a 32-bit
-/// target is dropped like any other.
+/// target is dropped like any other. Each read asks for at most 16 KiB, so
+/// the length that the peer states never becomes the size of one request.
 ///
 /// # Errors
 ///
@@ -91,7 +93,7 @@ pub async fn skip_capsule_value<F: ReadChunk, A: ReceiverAccess<Family = F>>(
     let mut completed = 0u64;
     let mut value = io.compose(ReadLimit(length));
     while completed < length {
-        match value.read_chunk(NonZeroUsize::MAX).await {
+        match value.read_chunk(SKIP_CHUNK_MAXIMUM).await {
             Ok(Some(chunk)) => {
                 // A chunk is at most `usize::MAX` bytes, and the budget keeps
                 // the total at most `length`.
@@ -110,8 +112,15 @@ pub async fn skip_capsule_value<F: ReadChunk, A: ReceiverAccess<Family = F>>(
     Ok(())
 }
 
+/// The largest number of bytes that [`skip_capsule_value`] asks for at once.
+const SKIP_CHUNK_MAXIMUM: NonZeroUsize = NonZeroUsize::new(16 * 1024).unwrap();
+
 /// The value of a capsule could not be read to the end to drop it (RFC 9297
 /// §3.2).
+///
+/// The counts are `u64`, as the length of a capsule is, rather than the
+/// `usize` of `nitori_io::error::IncompleteError`, which does not hold every
+/// length on a 32-bit target.
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 pub enum SkipCapsuleValueError<E> {

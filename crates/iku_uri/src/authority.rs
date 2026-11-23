@@ -128,7 +128,10 @@ impl Authority {
     /// ([`Scheme::default_port`]). In a registered name, a percent-encoded
     /// unreserved character is the same as the character (§6.2.2.2); case
     /// is already ignored, since hosts are held in lowercase. IP addresses
-    /// are compared as addresses.
+    /// are compared as addresses, so `[::1]` and `[0:0::1]` are the same,
+    /// which goes beyond the syntax-based normalization of §6.2.2. Hosts of
+    /// different kinds are different: a registered name that decodes to the
+    /// text of an IPv4 address, such as `127.0.0.%31`, is not that address.
     ///
     /// `==` compares the hosts and the port numbers as they are, without a
     /// scheme.
@@ -304,7 +307,7 @@ const fn hex_value(digit: u8) -> u8 {
 #[snafu(visibility(pub(crate)))]
 pub enum AuthorityError {
     /// The authority holds userinfo (`@`), which RFC 9110 §4.2.4 deprecates.
-    #[snafu(display("an authority holds userinfo"))]
+    #[snafu(transparent)]
     Userinfo {
         /// Where the first `@` is.
         source: UserinfoNotAllowedError,
@@ -325,7 +328,7 @@ pub enum AuthorityError {
         source: InvalidIpFutureError,
     },
     /// Something other than `:` and a port follows an IP literal.
-    #[snafu(display("an IP literal is followed by something other than a port"))]
+    #[snafu(transparent)]
     AfterIpLiteral {
         /// Where the offending text starts.
         source: TextAfterIpLiteralError,
@@ -349,7 +352,7 @@ pub enum AuthorityError {
         source: InvalidPortCharacterError,
     },
     /// The port is above 65535.
-    #[snafu(display("a port is above 65535"))]
+    #[snafu(transparent)]
     PortOutOfRange {
         /// Where the port starts.
         source: PortOutOfRangeError,

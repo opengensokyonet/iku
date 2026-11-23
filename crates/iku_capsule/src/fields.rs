@@ -26,8 +26,11 @@ pub fn capsule_protocol_field_value() -> FieldValue {
 /// does not parse and a field of several lines count as no field, as does the
 /// boolean false.
 ///
-/// This is the whole rule for a request. A response also depends on its
-/// status code: use [`response_uses_capsule_protocol`].
+/// For a request, this is what the client says; whether the protocol is in
+/// use also depends on the response, through
+/// [`response_uses_capsule_protocol`] (RFC 9297 §3.2). It reads the field
+/// only: an upgrade token that uses the Capsule Protocol by its definition,
+/// such as `connect-udp`, implies it without the field (§3.2, §3.4).
 pub fn uses_capsule_protocol(fields: &FieldSection) -> bool {
     matches!(
         Item::from_fields(fields, &capsule_protocol_field_name()),
@@ -42,19 +45,26 @@ pub fn uses_capsule_protocol(fields: &FieldSection) -> bool {
 /// A response with any other status code does not use the protocol, whatever
 /// its fields say.
 ///
+/// It reads the field only. An endpoint that knows that the upgrade token
+/// of the request uses the protocol by its definition checks for 204, 205
+/// and 206 itself, since such a response may come without the field
+/// (§3.2).
+///
 /// # Errors
 ///
-/// [`CapsuleResponseError`] if the status code is 204, 205 or 206 and the
+/// [`CapsuleProtocolStatusError`] if the status code is 204, 205 or 206 and the
 /// fields say that the protocol is in use: those responses must not use it,
 /// and the recipient treats the message as malformed (§3.2).
-pub fn response_uses_capsule_protocol(head: &ResponseHead) -> Result<bool, CapsuleResponseError> {
+pub fn response_uses_capsule_protocol(
+    head: &ResponseHead,
+) -> Result<bool, CapsuleProtocolStatusError> {
     let status = head.status();
     let allowed = status.get() == 101 || status.class() == StatusClass::Successful;
     if !allowed || !uses_capsule_protocol(head.fields()) {
         return Ok(false);
     }
     if matches!(status.get(), 204..=206) {
-        return Err(CapsuleResponseError { status });
+        return Err(CapsuleProtocolStatusError { status });
     }
     Ok(true)
 }
@@ -63,11 +73,11 @@ pub fn response_uses_capsule_protocol(head: &ResponseHead) -> Result<bool, Capsu
 /// Protocol, which those responses must not do (RFC 9297 §3.2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
 #[snafu(display("a response with status {status} uses the capsule protocol"))]
-pub struct CapsuleResponseError {
+pub struct CapsuleProtocolStatusError {
     status: StatusCode,
 }
 
-impl CapsuleResponseError {
+impl CapsuleProtocolStatusError {
     /// The status code: 204, 205 or 206.
     pub const fn status(self) -> StatusCode {
         self.status

@@ -134,7 +134,7 @@ fn error_display() {
 }
 
 fn wide(capsule_type: (u64, VarIntWidth), length: (u64, VarIntWidth)) -> CapsuleHeader {
-    CapsuleHeader::with_encoding(
+    CapsuleHeader::with_widths(
         VarIntField::new(
             CapsuleType::new(VarInt::new(capsule_type.0).unwrap()),
             capsule_type.1,
@@ -151,7 +151,7 @@ fn new_writes_the_shortest_encodings() {
 }
 
 #[test]
-fn with_encoding_writes_the_given_widths() {
+fn with_widths_writes_the_given_widths() {
     use VarIntWidth::{Eight, Four, One, Two};
     assert_eq!(written(wide((0, Two), (3, One))), [0x40, 0x00, 0x03]);
     assert_eq!(written(wide((0, One), (3, Two))), [0x00, 0x40, 0x03]);

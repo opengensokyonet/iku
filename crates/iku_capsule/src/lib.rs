@@ -43,7 +43,7 @@ mod write;
 
 pub use capsule_type::{CapsuleHeader, CapsuleType};
 pub use fields::{
-    CapsuleMessageFieldError, CapsuleResponseError, capsule_protocol_field_name,
+    CapsuleMessageFieldError, CapsuleProtocolStatusError, capsule_protocol_field_name,
     capsule_protocol_field_value, check_capsule_message_fields, response_uses_capsule_protocol,
     uses_capsule_protocol,
 };

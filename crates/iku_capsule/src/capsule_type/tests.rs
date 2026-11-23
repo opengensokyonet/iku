@@ -64,10 +64,10 @@ where
 }
 
 #[test]
-fn with_encoding_keeps_the_given_widths() {
+fn with_widths_keeps_the_given_widths() {
     let capsule_type = field(CapsuleType::new(var_int(0x25)), VarIntWidth::Four);
     let length = field(var_int(3), VarIntWidth::Two);
-    let header = CapsuleHeader::with_encoding(capsule_type, length);
+    let header = CapsuleHeader::with_widths(capsule_type, length);
     assert_eq!(header.capsule_type(), CapsuleType::new(var_int(0x25)));
     assert_eq!(header.length(), var_int(3));
     assert_eq!(header.capsule_type_field(), capsule_type);
@@ -98,11 +98,11 @@ fn new_takes_the_shortest_widths() {
 #[test]
 fn headers_that_differ_only_in_width_are_not_equal() {
     let shortest = CapsuleHeader::new(CapsuleType::DATAGRAM, var_int(3));
-    let wide_length = CapsuleHeader::with_encoding(
+    let wide_length = CapsuleHeader::with_widths(
         field(CapsuleType::DATAGRAM, VarIntWidth::One),
         field(var_int(3), VarIntWidth::Two),
     );
-    let wide_type = CapsuleHeader::with_encoding(
+    let wide_type = CapsuleHeader::with_widths(
         field(CapsuleType::DATAGRAM, VarIntWidth::Eight),
         field(var_int(3), VarIntWidth::One),
     );
@@ -111,7 +111,7 @@ fn headers_that_differ_only_in_width_are_not_equal() {
     assert_ne!(wide_length, wide_type);
     assert_eq!(wide_length.length(), shortest.length());
     assert_eq!(wide_length.capsule_type(), shortest.capsule_type());
-    let same = CapsuleHeader::with_encoding(
+    let same = CapsuleHeader::with_widths(
         field(CapsuleType::DATAGRAM, VarIntWidth::One),
         field(var_int(3), VarIntWidth::One),
     );

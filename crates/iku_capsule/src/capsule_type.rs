@@ -45,7 +45,8 @@ impl fmt::Display for CapsuleType {
 ///
 /// A header that is read keeps the widths it was read with, and writing it
 /// writes them, so an intermediary forwards the header unmodified (§3.2).
-/// [`CapsuleHeader::new`] takes the shortest widths. Equality compares the
+/// [`CapsuleHeader::new`] takes the shortest widths, and
+/// [`CapsuleHeader::with_widths`] the widths of its fields. Equality compares the
 /// widths too.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CapsuleHeader {
@@ -65,7 +66,7 @@ impl CapsuleHeader {
 
     /// The header with the type and the length in the widths that their
     /// fields hold.
-    pub const fn with_encoding(
+    pub const fn with_widths(
         capsule_type: VarIntField<CapsuleType>,
         length: VarIntField<VarInt>,
     ) -> Self {
