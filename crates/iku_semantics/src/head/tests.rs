@@ -1,6 +1,6 @@
 use super::*;
 use crate::field::{FieldName, FieldValue};
-use crate::target::TargetUri;
+use crate::target::{AsteriskTarget, TargetUri};
 use bytes::Bytes;
 use iku_uri::{Authority, PathAndQuery, Scheme};
 
@@ -17,6 +17,12 @@ fn uri() -> RequestTarget {
 
 fn authority_form() -> RequestTarget {
     RequestTarget::Authority(Authority::new(b"example.com:443").unwrap())
+}
+
+fn asterisk() -> RequestTarget {
+    RequestTarget::Asterisk(
+        AsteriskTarget::new(Scheme::HTTPS, Some(Authority::new(b"example.com").unwrap())).unwrap(),
+    )
 }
 
 fn websocket() -> Option<Protocol> {
@@ -49,7 +55,7 @@ fn request_head_accepts_connect_with_the_authority_form() {
 #[test]
 fn request_head_accepts_options_with_an_asterisk() {
     // RFC 9110 §7.1, §9.3.7.
-    assert!(new(Method::OPTIONS, RequestTarget::Asterisk, None).is_ok());
+    assert!(new(Method::OPTIONS, asterisk(), None).is_ok());
 }
 
 #[test]
@@ -89,7 +95,7 @@ fn request_head_rejects_the_authority_form_without_connect() {
 fn request_head_rejects_an_asterisk_without_options() {
     for method in [Method::GET, Method::CONNECT, Method::POST] {
         assert_eq!(
-            new(method, RequestTarget::Asterisk, None),
+            new(method, asterisk(), None),
             Err(RequestHeadError::AsteriskWithoutOptions)
         );
     }
@@ -98,7 +104,7 @@ fn request_head_rejects_an_asterisk_without_options() {
 #[test]
 fn request_head_rejects_a_protocol_with_an_asterisk() {
     assert_eq!(
-        new(Method::OPTIONS, RequestTarget::Asterisk, websocket()),
+        new(Method::OPTIONS, asterisk(), websocket()),
         Err(RequestHeadError::ProtocolWithoutConnect)
     );
 }
@@ -128,9 +134,25 @@ fn request_head_rejects_connect_with_a_uri_and_no_protocol() {
 }
 
 #[test]
+fn request_head_rejects_connect_without_a_port() {
+    // No port, and an empty one (RFC 9110 §9.3.6).
+    for authority in [&b"example.com"[..], b"example.com:", b"[::1]"] {
+        let target = RequestTarget::Authority(Authority::new(authority).unwrap());
+        assert_eq!(
+            new(Method::CONNECT, target, None),
+            Err(RequestHeadError::ConnectWithoutPort),
+            "{authority:?}"
+        );
+    }
+    // Port 0 is a port.
+    let target = RequestTarget::Authority(Authority::new(b"example.com:0").unwrap());
+    assert!(new(Method::CONNECT, target, None).is_ok());
+}
+
+#[test]
 fn request_head_rejects_connect_with_an_asterisk() {
     assert_eq!(
-        new(Method::CONNECT, RequestTarget::Asterisk, None),
+        new(Method::CONNECT, asterisk(), None),
         Err(RequestHeadError::AsteriskWithoutOptions)
     );
 }
@@ -167,6 +189,7 @@ fn request_head_errors_display() {
         RequestHeadError::ProtocolWithoutConnect,
         RequestHeadError::ProtocolWithoutUri,
         RequestHeadError::ConnectWithoutAuthorityForm,
+        RequestHeadError::ConnectWithoutPort,
     ] {
         assert!(!error.to_string().is_empty());
     }

@@ -62,8 +62,10 @@ fn target_uri_into_parts_gives_the_components_back() {
 #[test]
 fn request_target_variants_compare() {
     let uri = TargetUri::new(Scheme::HTTP, Some(authority("h")), PathAndQuery::ROOT).unwrap();
-    assert_eq!(RequestTarget::Asterisk, RequestTarget::Asterisk);
-    assert_ne!(RequestTarget::Asterisk, RequestTarget::Uri(uri));
+    let asterisk =
+        RequestTarget::Asterisk(AsteriskTarget::new(Scheme::HTTP, Some(authority("h"))).unwrap());
+    assert_eq!(asterisk, asterisk.clone());
+    assert_ne!(asterisk, RequestTarget::Uri(uri));
     assert_eq!(
         RequestTarget::Authority(authority("h:1")),
         RequestTarget::Authority(authority("H:1"))
@@ -75,5 +77,28 @@ fn missing_authority_error_displays() {
     assert_eq!(
         alloc::format!("{MissingAuthorityError}"),
         "an http or https target URI has no authority"
+    );
+}
+
+#[test]
+fn asterisk_target_holds_the_scheme_and_the_authority() {
+    let target = AsteriskTarget::new(Scheme::HTTPS, Some(authority("example.com:8443"))).unwrap();
+    assert_eq!(target.scheme(), &Scheme::HTTPS);
+    assert_eq!(target.authority(), Some(&authority("example.com:8443")));
+    assert_eq!(
+        target.into_parts(),
+        (Scheme::HTTPS, Some(authority("example.com:8443")))
+    );
+}
+
+#[test]
+fn asterisk_target_rejects_http_and_https_without_an_authority() {
+    assert_eq!(
+        AsteriskTarget::new(Scheme::HTTP, None),
+        Err(MissingAuthorityError)
+    );
+    assert_eq!(
+        AsteriskTarget::new(Scheme::HTTPS, None),
+        Err(MissingAuthorityError)
     );
 }

@@ -17,9 +17,9 @@ fn protocol_without_a_version() {
 #[test]
 fn protocol_with_a_version() {
     let p = protocol("HTTP/2.0").unwrap();
-    assert_eq!(p.name(), b"HTTP");
+    assert_eq!(p.name(), b"http");
     assert_eq!(p.version(), Some(&b"2.0"[..]));
-    assert_eq!(p.as_bytes(), b"HTTP/2.0");
+    assert_eq!(p.as_bytes(), b"http/2.0");
 }
 
 #[test]
@@ -97,11 +97,17 @@ fn protocol_display_and_debug() {
 }
 
 #[test]
-fn protocol_equality_is_case_sensitive() {
-    assert_ne!(
+fn protocol_name_is_lowercased_and_the_version_kept() {
+    assert_eq!(
         protocol("WebSocket").unwrap(),
         protocol("websocket").unwrap()
     );
+    let mixed = protocol("WebTransport/Draft02").unwrap();
+    assert_eq!(mixed.as_bytes(), b"webtransport/Draft02");
+    assert_eq!(mixed.name(), b"webtransport");
+    assert_eq!(mixed.version(), Some(&b"Draft02"[..]));
+    assert_eq!(format!("{mixed}"), "webtransport/Draft02");
+    assert_ne!(mixed, protocol("webtransport/draft02").unwrap());
 }
 
 #[test]

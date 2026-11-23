@@ -13,7 +13,8 @@ use snafu::Snafu;
 ///
 /// Construction checks that the method and the target agree (RFC 9110
 /// §7.1): the authority form only with CONNECT, `*` only with OPTIONS, and a
-/// CONNECT without a protocol only with the authority form (§9.3.6). A
+/// CONNECT without a protocol only with the authority form, which has a port
+/// (§9.3.6: there is no default port). A
 /// protocol makes the request an extended CONNECT, whose target is a full
 /// URI ([RFC 8441] §4, [RFC 9220]).
 ///
@@ -46,10 +47,13 @@ impl RequestHead {
                 return AuthorityFormWithoutConnectSnafu.fail();
             }
             (RequestTarget::Authority(_), Some(_)) => return ProtocolWithoutUriSnafu.fail(),
-            (RequestTarget::Asterisk, _) if method != Method::OPTIONS => {
+            (RequestTarget::Authority(authority), None) if authority.port().is_none() => {
+                return ConnectWithoutPortSnafu.fail();
+            }
+            (RequestTarget::Asterisk(_), _) if method != Method::OPTIONS => {
                 return AsteriskWithoutOptionsSnafu.fail();
             }
-            (RequestTarget::Asterisk, Some(_)) => return ProtocolWithoutConnectSnafu.fail(),
+            (RequestTarget::Asterisk(_), Some(_)) => return ProtocolWithoutConnectSnafu.fail(),
             (RequestTarget::Uri(_), Some(_)) if !connect => {
                 return ProtocolWithoutConnectSnafu.fail();
             }
@@ -118,6 +122,10 @@ pub enum RequestHeadError {
     /// §9.3.6).
     #[snafu(display("a CONNECT without a protocol targets a URI"))]
     ConnectWithoutAuthorityForm,
+    /// The target of a CONNECT has no port, or an empty one: there is no
+    /// default port (RFC 9110 §9.3.6).
+    #[snafu(display("the target of a CONNECT has no port"))]
+    ConnectWithoutPort,
 }
 
 /// The head of a response: its status code and its header section; not its

@@ -12,6 +12,11 @@ use snafu::{ResultExt, Snafu};
 /// request: an upgrade token, `protocol-name [ "/" protocol-version ]`, both
 /// tokens (RFC 8441 §4, RFC 9110 §7.8), such as `websocket` or
 /// `webtransport`.
+///
+/// The name is held in lowercase, since a protocol-name is case-insensitive
+/// (RFC 9110 §7.8, §16.7), so equality and hashing ignore the case of the
+/// name. The version is kept as written: RFC 9110 does not say that it is
+/// case-insensitive.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Protocol {
     bytes: Bytes,
@@ -20,7 +25,7 @@ pub struct Protocol {
 }
 
 impl Protocol {
-    /// Checks that `bytes` is an upgrade token.
+    /// Checks that `bytes` is an upgrade token, and lowercases its name.
     ///
     /// # Errors
     ///
@@ -36,10 +41,18 @@ impl Protocol {
         if let Some(version) = version {
             token::check(version).context(VersionSnafu)?;
         }
+        let bytes = if name.iter().any(u8::is_ascii_uppercase) {
+            let mut lowered = bytes.to_vec();
+            lowered[..name.len()].make_ascii_lowercase();
+            Bytes::from(lowered)
+        } else {
+            bytes
+        };
         Ok(Self { bytes, slash })
     }
 
-    /// As [`Protocol::new`], without copying `text`.
+    /// As [`Protocol::new`], without copying `text` when its name is in
+    /// lowercase.
     ///
     /// # Errors
     ///
@@ -48,12 +61,12 @@ impl Protocol {
         Self::new(Bytes::from_static(text.as_bytes()))
     }
 
-    /// The protocol as written.
+    /// The protocol, with the name in lowercase.
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
-    /// The name of the protocol.
+    /// The name of the protocol, in lowercase.
     pub fn name(&self) -> &[u8] {
         &self.bytes[..self.slash.unwrap_or(self.bytes.len())]
     }

@@ -16,8 +16,9 @@ pub enum RequestTarget {
     Uri(TargetUri),
     /// The destination of a CONNECT tunnel (§9.3.6).
     Authority(Authority),
-    /// `*`: the server rather than a resource, for OPTIONS (§9.3.7).
-    Asterisk,
+    /// `*`: the server rather than a resource, for OPTIONS (§9.3.7), with
+    /// the scheme and authority that its target URI is made of (§7.1).
+    Asterisk(AsteriskTarget),
 }
 
 /// The components of a target URI that HTTP uses: scheme, authority, path
@@ -72,6 +73,56 @@ impl TargetUri {
     /// The components, taken apart.
     pub fn into_parts(self) -> (Scheme, Option<Authority>, PathAndQuery) {
         (self.scheme, self.authority, self.path_and_query)
+    }
+}
+
+/// The target of an OPTIONS request in the asterisk form (`*`): the scheme
+/// and the authority of the server it asks about (RFC 9110 §7.1, §9.3.7).
+///
+/// The target URI of such a request is the scheme and authority alone, with
+/// no path (§7.1). HTTP/2 and HTTP/3 carry them in `:scheme` and
+/// `:authority` ([RFC 9113] §8.3.1, [RFC 9114] §4.3.1); HTTP/1.1 takes the
+/// scheme from the connection and the authority from `Host`. As in a
+/// [`TargetUri`], an `http` or `https` scheme has an authority.
+///
+/// [RFC 9113]: https://www.rfc-editor.org/rfc/rfc9113.html
+/// [RFC 9114]: https://www.rfc-editor.org/rfc/rfc9114.html
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct AsteriskTarget {
+    scheme: Scheme,
+    authority: Option<Authority>,
+}
+
+impl AsteriskTarget {
+    /// Puts the scheme and the authority together.
+    ///
+    /// # Errors
+    ///
+    /// [`MissingAuthorityError`] if the scheme is `http` or `https` and there
+    /// is no authority.
+    pub fn new(
+        scheme: Scheme,
+        authority: Option<Authority>,
+    ) -> Result<Self, MissingAuthorityError> {
+        if authority.is_none() && scheme.is_http_or_https() {
+            return MissingAuthoritySnafu.fail();
+        }
+        Ok(Self { scheme, authority })
+    }
+
+    /// The scheme.
+    pub fn scheme(&self) -> &Scheme {
+        &self.scheme
+    }
+
+    /// The authority, if there is one.
+    pub fn authority(&self) -> Option<&Authority> {
+        self.authority.as_ref()
+    }
+
+    /// The scheme and the authority, taken apart.
+    pub fn into_parts(self) -> (Scheme, Option<Authority>) {
+        (self.scheme, self.authority)
     }
 }
 
