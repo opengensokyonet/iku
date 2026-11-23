@@ -203,6 +203,7 @@ vector_files! {
     vectors_examples => "examples.json",
     vectors_item => "item.json",
     vectors_key_generated => "key-generated.json",
+    vectors_large_generated => "large-generated.json",
     vectors_list => "list.json",
     vectors_listlist => "listlist.json",
     vectors_number_generated => "number-generated.json",
