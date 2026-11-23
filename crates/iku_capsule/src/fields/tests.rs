@@ -1,5 +1,7 @@
 use super::*;
 use alloc::string::ToString;
+use iku_semantics::head::ResponseHead;
+use iku_semantics::status::StatusCode;
 
 fn name(text: &'static str) -> FieldName {
     FieldName::from_static(text).unwrap()
@@ -177,4 +179,61 @@ fn error_display() {
         CapsuleMessageFieldError::TransferEncoding.to_string(),
         "a capsule message has transfer-encoding"
     );
+}
+
+fn response(status: u16, lines: &[&'static str]) -> ResponseHead {
+    let mut fields = FieldSection::new();
+    for line in lines {
+        fields.append(capsule_protocol_field_name(), value(line));
+    }
+    ResponseHead::new(StatusCode::new(status).unwrap(), fields)
+}
+
+#[test]
+fn response_uses_the_protocol_with_2xx_or_101_and_true() {
+    for status in [101, 200, 202, 299] {
+        assert_eq!(
+            response_uses_capsule_protocol(&response(status, &["?1"])),
+            Ok(true),
+            "{status}"
+        );
+        assert_eq!(
+            response_uses_capsule_protocol(&response(status, &["?0"])),
+            Ok(false),
+            "{status}"
+        );
+        assert_eq!(
+            response_uses_capsule_protocol(&response(status, &[])),
+            Ok(false),
+            "{status}"
+        );
+    }
+}
+
+#[test]
+fn response_with_another_status_does_not_use_the_protocol() {
+    // RFC 9297 §3.2: not in use unless 2xx or 101.
+    for status in [100, 102, 301, 404, 500] {
+        assert_eq!(
+            response_uses_capsule_protocol(&response(status, &["?1"])),
+            Ok(false),
+            "{status}"
+        );
+    }
+}
+
+#[test]
+fn response_204_205_206_with_true_is_malformed() {
+    for status in [204, 205, 206] {
+        let error = response_uses_capsule_protocol(&response(status, &["?1"])).unwrap_err();
+        assert_eq!(error.status().get(), status);
+        assert_eq!(
+            error.to_string(),
+            alloc::format!("a response with status {status} uses the capsule protocol")
+        );
+        assert_eq!(
+            response_uses_capsule_protocol(&response(status, &["?0"])),
+            Ok(false)
+        );
+    }
 }

@@ -2,6 +2,8 @@
 //! §3.4).
 
 use iku_semantics::field::{FieldName, FieldSection, FieldValue};
+use iku_semantics::head::ResponseHead;
+use iku_semantics::status::{StatusClass, StatusCode};
 use iku_structured_fields::{BareItem, Item};
 use snafu::Snafu;
 
@@ -23,11 +25,53 @@ pub fn capsule_protocol_field_value() -> FieldValue {
 /// Its parameters are ignored. A value that is not a boolean, a field that
 /// does not parse and a field of several lines count as no field, as does the
 /// boolean false.
+///
+/// This is the whole rule for a request. A response also depends on its
+/// status code: use [`response_uses_capsule_protocol`].
 pub fn uses_capsule_protocol(fields: &FieldSection) -> bool {
     matches!(
         Item::from_fields(fields, &capsule_protocol_field_name()),
         Ok(Some(item)) if *item.bare_item() == BareItem::Boolean(true)
     )
+}
+
+/// Whether the response `head` uses the Capsule Protocol (RFC 9297 §3.2,
+/// §3.4): its status code is 2xx or 101, and its fields say so as
+/// [`uses_capsule_protocol`] reads them.
+///
+/// A response with any other status code does not use the protocol, whatever
+/// its fields say.
+///
+/// # Errors
+///
+/// [`CapsuleResponseError`] if the status code is 204, 205 or 206 and the
+/// fields say that the protocol is in use: those responses must not use it,
+/// and the recipient treats the message as malformed (§3.2).
+pub fn response_uses_capsule_protocol(head: &ResponseHead) -> Result<bool, CapsuleResponseError> {
+    let status = head.status();
+    let allowed = status.get() == 101 || status.class() == StatusClass::Successful;
+    if !allowed || !uses_capsule_protocol(head.fields()) {
+        return Ok(false);
+    }
+    if matches!(status.get(), 204..=206) {
+        return Err(CapsuleResponseError { status });
+    }
+    Ok(true)
+}
+
+/// A response with status code 204, 205 or 206 says that it uses the Capsule
+/// Protocol, which those responses must not do (RFC 9297 §3.2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Snafu)]
+#[snafu(display("a response with status {status} uses the capsule protocol"))]
+pub struct CapsuleResponseError {
+    status: StatusCode,
+}
+
+impl CapsuleResponseError {
+    /// The status code: 204, 205 or 206.
+    pub const fn status(self) -> StatusCode {
+        self.status
+    }
 }
 
 /// Checks that `fields` hold none of the fields that a message using the

@@ -15,7 +15,8 @@
 //! A capsule of an unknown type is read like any other; an endpoint drops it
 //! and an intermediary forwards it unmodified (§3.2). The fields that say the
 //! protocol is in use and the ones that it forbids are in
-//! [`uses_capsule_protocol`] and [`check_capsule_message_fields`].
+//! [`uses_capsule_protocol`], [`response_uses_capsule_protocol`] and
+//! [`check_capsule_message_fields`].
 //!
 //! The package does not use the standard library; it needs `alloc`.
 //!
@@ -38,8 +39,9 @@ mod write;
 
 pub use capsule_type::{CapsuleHeader, CapsuleType};
 pub use fields::{
-    CapsuleMessageFieldError, capsule_protocol_field_name, capsule_protocol_field_value,
-    check_capsule_message_fields, uses_capsule_protocol,
+    CapsuleMessageFieldError, CapsuleResponseError, capsule_protocol_field_name,
+    capsule_protocol_field_value, check_capsule_message_fields, response_uses_capsule_protocol,
+    uses_capsule_protocol,
 };
 pub use read::{
     CollectCapsuleValue, CollectCapsuleValueError, CollectCapsuleValueExt,
