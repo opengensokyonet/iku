@@ -46,6 +46,7 @@ dependencies = [
  "iku_structured_fields",
  "nitori_call",
  "nitori_io",
+ "sakuya_var_int",
  "snafu",
 ]
 
@@ -130,6 +131,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "sakuya_var_int"
+version = "0.0.0"
+source = "git+https://github.com/opengensokyonet/sakuya?rev=740284c9f7d47051b29ae8e0cbc6db75462fb6b5#740284c9f7d47051b29ae8e0cbc6db75462fb6b5"
+dependencies = [
+ "bytes",
+ "nitori_call",
+ "nitori_io",
+ "snafu",
 ]
 
 [[package]]
