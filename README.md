@@ -19,7 +19,7 @@ No package uses the standard library; all need `alloc`.
 
 Install [rustup](https://rustup.rs/). The repository pins `nightly-2026-11-25` with rustfmt, Clippy and the `x86_64-unknown-none` target in `rust-toolchain.toml`, the toolchain that the other Open Gensokyo Network repositories use; run commands from the repository root so rustup selects this toolchain. `iku_capsule` uses the nightly feature `impl_trait_in_assoc_type`, which crates that define `nitori_call` operations enable; the other packages use none. Packages remain unpublished (`publish = false`).
 
-`snafu`, `nitori_call`, `nitori_io` and `sakuya_var_int` (the QUIC variable-length integers that the Capsule Type and Length use, from the sakuya repository) are Git dependencies pinned to specific commits in `Cargo.toml`; Cargo fetches them automatically.
+`snafu`, `nitori_call`, `nitori_codec`, `nitori_io` and `sakuya_var_int` (the QUIC variable-length integers that the Capsule Type and Length use, from the sakuya repository) are Git dependencies pinned to specific commits in `Cargo.toml`; Cargo fetches them automatically.
 
 `serde_json` is a development dependency of `iku_structured_fields` only, for the HTTP working group's structured-field test vectors in `crates/iku_structured_fields/tests/vectors/` (BSD 3-Clause; source commit and license in that directory's `README.md`).
 

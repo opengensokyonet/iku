@@ -23,7 +23,7 @@ fn widths(header: CapsuleHeader) -> (VarIntWidth, VarIntWidth) {
 /// `value_limit`, drops the rest with `skip_capsule_value`, then reads the
 /// next header.
 #[call(sync)]
-async fn read_part_then_skip<F: ReadChunk, A: ReceiverAccess<Family = F>>(
+async fn read_part_then_skip<F: ReadChunk<Metadata = ()>, A: ReceiverAccess<Family = F>>(
     io: &mut A,
 ) -> Result<([u8; 2], u64, Option<CapsuleHeader>), &'static str> {
     let header = io
@@ -32,7 +32,7 @@ async fn read_part_then_skip<F: ReadChunk, A: ReceiverAccess<Family = F>>(
         .map_err(|_| "first header")?
         .ok_or("no first header")?;
     let mut value = io.compose(header.value_limit());
-    let part = value.read_array::<2>().await.map_err(|_| "part")?;
+    let part = value.read_array::<2>().await.map_err(|_| "part")?.value;
     let rest = value.into_state().0;
     io.skip_capsule_value(rest).await.map_err(|_| "skip")?;
     let next = io.read_capsule_header().await.map_err(|_| "next header")?;
@@ -45,7 +45,7 @@ macro_rules! read_past_value {
         /// number of bytes read before the stream of the value ends, when it
         /// does.
         #[call(sync)]
-        async fn $name<F: ReadChunk, A: ReceiverAccess<Family = F>>(
+        async fn $name<F: ReadChunk<Metadata = ()>, A: ReceiverAccess<Family = F>>(
             io: &mut A,
         ) -> Result<Option<usize>, &'static str> {
             let header = io

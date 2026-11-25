@@ -45,6 +45,7 @@ dependencies = [
  "iku_semantics",
  "iku_structured_fields",
  "nitori_call",
+ "nitori_codec",
  "nitori_io",
  "sakuya_var_int",
  "snafu",
@@ -92,7 +93,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "nitori_call"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=e6ed71c8577018dc33086881be8c72d64a9c9424#e6ed71c8577018dc33086881be8c72d64a9c9424"
+source = "git+https://github.com/opengensokyonet/nitori?rev=0de5f36b921c891815d138226c6180c6aa70953b#0de5f36b921c891815d138226c6180c6aa70953b"
 dependencies = [
  "bytes",
  "futures-core",
@@ -104,7 +105,7 @@ dependencies = [
 [[package]]
 name = "nitori_call_macros"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=e6ed71c8577018dc33086881be8c72d64a9c9424#e6ed71c8577018dc33086881be8c72d64a9c9424"
+source = "git+https://github.com/opengensokyonet/nitori?rev=0de5f36b921c891815d138226c6180c6aa70953b#0de5f36b921c891815d138226c6180c6aa70953b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -112,9 +113,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "nitori_codec"
+version = "0.0.0"
+source = "git+https://github.com/opengensokyonet/nitori?rev=0de5f36b921c891815d138226c6180c6aa70953b#0de5f36b921c891815d138226c6180c6aa70953b"
+dependencies = [
+ "bytes",
+ "nitori_call",
+ "nitori_io",
+ "snafu",
+]
+
+[[package]]
 name = "nitori_io"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=e6ed71c8577018dc33086881be8c72d64a9c9424#e6ed71c8577018dc33086881be8c72d64a9c9424"
+source = "git+https://github.com/opengensokyonet/nitori?rev=0de5f36b921c891815d138226c6180c6aa70953b#0de5f36b921c891815d138226c6180c6aa70953b"
 dependencies = [
  "bytes",
  "nitori_call",
@@ -149,10 +161,11 @@ dependencies = [
 [[package]]
 name = "sakuya_var_int"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/sakuya?rev=a37526085f3be89580734726594efc45237546c8#a37526085f3be89580734726594efc45237546c8"
+source = "git+https://github.com/opengensokyonet/sakuya?rev=39c4bc0fad1f032be7d00cc6f5b5c14585b19eb9#39c4bc0fad1f032be7d00cc6f5b5c14585b19eb9"
 dependencies = [
  "bytes",
  "nitori_call",
+ "nitori_codec",
  "nitori_io",
  "snafu",
 ]

@@ -3,18 +3,19 @@
 use crate::capsule_type::CapsuleHeader;
 use bytes::BufMut;
 use nitori_call::{ReceiverAccess, call};
-use nitori_io::{calls::WriteAllError, prelude::*};
+use nitori_io::{Combine, calls::WriteAllError, prelude::*};
 use sakuya_var_int::{VarInt, codec::write_var_int_field};
 use snafu::{ResultExt, Snafu};
 
 /// Writes the header of a capsule: its type and length, each in the width
 /// that the header holds, so a header that was read is written back as it
-/// was. The value follows, written by the caller.
+/// was. The value follows, written by the caller. Returns the sink's merged
+/// report of the bytes written.
 #[call(sync)]
-pub async fn write_capsule_header<F: Write, A: ReceiverAccess<Family = F>>(
+pub async fn write_capsule_header<F: Write<Report: Combine>, A: ReceiverAccess<Family = F>>(
     io: &mut A,
     header: CapsuleHeader,
-) -> Result<(), WriteCapsuleHeaderError<F::Error>> {
+) -> Result<F::Report, WriteCapsuleHeaderError<F::Error>> {
     let mut bytes = [0u8; 2 * VarInt::MAX_ENCODED_LEN];
     let mut rest = &mut bytes[..];
     // invariant: each encoding takes at most `VarInt::MAX_ENCODED_LEN`

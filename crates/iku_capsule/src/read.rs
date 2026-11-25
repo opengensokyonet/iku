@@ -4,14 +4,16 @@ use crate::capsule_type::{CapsuleHeader, CapsuleType};
 use bytes::Buf;
 use core::num::NonZeroUsize;
 use nitori_call::{ReceiverAccess, call};
+use nitori_codec::Decode as _;
 use nitori_io::{adapters::ReadLimit, prelude::*};
-use sakuya_var_int::call::{ReadVarIntError, ReadVarIntFieldExt as _};
+use sakuya_var_int::{VarInt, VarIntField, stream::ReadVarIntError};
 use snafu::{ResultExt, Snafu};
 
 /// Reads the header of the next capsule: `None` when the stream ends before
 /// it, between two capsules.
 ///
-/// The header keeps the widths of the encodings it was read from. The value
+/// The header keeps the widths of the encodings it was read from. It reads
+/// from streams without metadata. The value
 /// follows: compose the stream with [`CapsuleHeader::value_limit`] to read it
 /// as a stream of its own, which ends where the value does, or drop it with
 /// [`skip_capsule_value`].
@@ -20,16 +22,19 @@ use snafu::{ResultExt, Snafu};
 /// recipient treats as a malformed or incomplete message (RFC 9297 §3.3);
 /// the error then holds [`nitori_io::error::IncompleteError`].
 #[call(sync)]
-pub async fn read_capsule_header<F: Read, A: ReceiverAccess<Family = F>>(
+pub async fn read_capsule_header<F: Read<Metadata = ()>, A: ReceiverAccess<Family = F>>(
     io: &mut A,
 ) -> Result<Option<CapsuleHeader>, ReadCapsuleHeaderError<F::Error>> {
-    let capsule_type = match io.read_var_int_field::<CapsuleType>().await {
+    let capsule_type = match io.decode::<VarIntField<CapsuleType>>().await {
         Ok(capsule_type) => capsule_type,
         // The stream ended before the first byte of the header.
         Err(error) if error.is_incomplete() && error.completed() == 0 => return Ok(None),
         Err(source) => return Err(ReadCapsuleHeaderError::Type { source }),
     };
-    let length = io.read_var_int_field().await.context(LengthSnafu)?;
+    let length = io
+        .decode::<VarIntField<VarInt>>()
+        .await
+        .context(LengthSnafu)?;
     Ok(Some(CapsuleHeader::with_widths(capsule_type, length)))
 }
 
@@ -94,10 +99,10 @@ pub async fn skip_capsule_value<F: ReadChunk, A: ReceiverAccess<Family = F>>(
     let mut value = io.compose(ReadLimit(length));
     while completed < length {
         match value.read_chunk(SKIP_CHUNK_MAXIMUM).await {
-            Ok(Some(chunk)) => {
+            Ok(Some(segment)) => {
                 // A chunk is at most `usize::MAX` bytes, and the budget keeps
                 // the total at most `length`.
-                completed += chunk.remaining() as u64;
+                completed += segment.chunk.remaining() as u64;
             }
             Ok(None) => return IncompleteSnafu { length, completed }.fail(),
             Err(source) => {
