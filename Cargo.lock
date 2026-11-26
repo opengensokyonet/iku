@@ -93,7 +93,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "nitori_call"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=0de5f36b921c891815d138226c6180c6aa70953b#0de5f36b921c891815d138226c6180c6aa70953b"
+source = "git+https://github.com/opengensokyonet/nitori?rev=2323adf5114e1f36e0dacfdce4c330f959e4dd89#2323adf5114e1f36e0dacfdce4c330f959e4dd89"
 dependencies = [
  "bytes",
  "futures-core",
@@ -105,7 +105,7 @@ dependencies = [
 [[package]]
 name = "nitori_call_macros"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=0de5f36b921c891815d138226c6180c6aa70953b#0de5f36b921c891815d138226c6180c6aa70953b"
+source = "git+https://github.com/opengensokyonet/nitori?rev=2323adf5114e1f36e0dacfdce4c330f959e4dd89#2323adf5114e1f36e0dacfdce4c330f959e4dd89"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -115,7 +115,7 @@ dependencies = [
 [[package]]
 name = "nitori_codec"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=0de5f36b921c891815d138226c6180c6aa70953b#0de5f36b921c891815d138226c6180c6aa70953b"
+source = "git+https://github.com/opengensokyonet/nitori?rev=2323adf5114e1f36e0dacfdce4c330f959e4dd89#2323adf5114e1f36e0dacfdce4c330f959e4dd89"
 dependencies = [
  "bytes",
  "nitori_call",
@@ -126,7 +126,7 @@ dependencies = [
 [[package]]
 name = "nitori_io"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/nitori?rev=0de5f36b921c891815d138226c6180c6aa70953b#0de5f36b921c891815d138226c6180c6aa70953b"
+source = "git+https://github.com/opengensokyonet/nitori?rev=2323adf5114e1f36e0dacfdce4c330f959e4dd89#2323adf5114e1f36e0dacfdce4c330f959e4dd89"
 dependencies = [
  "bytes",
  "nitori_call",
@@ -161,7 +161,7 @@ dependencies = [
 [[package]]
 name = "sakuya_var_int"
 version = "0.0.0"
-source = "git+https://github.com/opengensokyonet/sakuya?rev=39c4bc0fad1f032be7d00cc6f5b5c14585b19eb9#39c4bc0fad1f032be7d00cc6f5b5c14585b19eb9"
+source = "git+https://github.com/opengensokyonet/sakuya?rev=06b6644bd4ebd4f42c1ae264f2267f1ec808c726#06b6644bd4ebd4f42c1ae264f2267f1ec808c726"
 dependencies = [
  "bytes",
  "nitori_call",
