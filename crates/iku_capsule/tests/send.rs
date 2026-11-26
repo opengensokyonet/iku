@@ -16,7 +16,7 @@ async fn read_through<I: ReceiverAccess<Family: Read<Metadata = ()>>>(
     read_capsule_header(io).await.ok().flatten()
 }
 
-async fn write_through<I: ReceiverAccess<Family: Write<Report = ()>>>(
+async fn write_through<I: ReceiverAccess<Family: Write<(), Report = ()>>>(
     io: &mut I,
     header: CapsuleHeader,
 ) -> bool {

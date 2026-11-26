@@ -12,7 +12,7 @@ use snafu::{ResultExt, Snafu};
 /// was. The value follows, written by the caller. Returns the sink's merged
 /// report of the bytes written.
 #[call(sync)]
-pub async fn write_capsule_header<F: Write<Report: Combine>, A: ReceiverAccess<Family = F>>(
+pub async fn write_capsule_header<F: Write<(), Report: Combine>, A: ReceiverAccess<Family = F>>(
     io: &mut A,
     header: CapsuleHeader,
 ) -> Result<F::Report, WriteCapsuleHeaderError<F::Error>> {
@@ -24,7 +24,7 @@ pub async fn write_capsule_header<F: Write<Report: Combine>, A: ReceiverAccess<F
     write_var_int_field(&mut rest, header.length_field());
     let unused = rest.remaining_mut();
     let encoded_len = bytes.len() - unused;
-    io.write_all(&bytes[..encoded_len])
+    io.write_all(&bytes[..encoded_len], ())
         .await
         .context(WriteCapsuleHeaderSnafu)
 }
